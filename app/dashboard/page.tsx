@@ -302,10 +302,42 @@ export default function DashboardPage() {
                             )}
 
                             <button
-                              onClick={() => {
-                                if (confirm('¿Estás seguro de eliminar este plano?')) {
-                                  // Lógica de eliminación (simulada o real)
-                                  setPlanos(prev => prev.filter(p => p.id !== plano.id));
+                              onClick={async () => {
+                                if (!confirm('¿Estás seguro de eliminar este plano permanentemente?')) return;
+                                
+                                try {
+                                  // Eliminación real en la base de datos
+                                  const apiKey = localStorage.getItem('apiKey');
+                                  if (!apiKey) {
+                                    // Modo demo: Solo eliminar de la lista local
+                                    setPlanos(prev => prev.filter(p => p.id !== plano.id));
+                                    return;
+                                  }
+
+                                  const response = await fetch(`/api/v1/planos/${plano.id}`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                      'x-api-key': apiKey
+                                    }
+                                  });
+
+                                  if (response.ok) {
+                                    // Actualizar estado local eliminando el item
+                                    setPlanos(prev => prev.filter(p => p.id !== plano.id));
+                                    // Actualizar contadores
+                                    setStats(prev => ({
+                                      ...prev,
+                                      total: prev.total - 1,
+                                      completed: plano.status === 'COMPLETED' ? prev.completed - 1 : prev.completed,
+                                      pending: (plano.status === 'PENDING' || plano.status === 'PROCESSING') ? prev.pending - 1 : prev.pending,
+                                      failed: plano.status === 'FAILED' ? prev.failed - 1 : prev.failed
+                                    }));
+                                  } else {
+                                    alert('Error al eliminar el plano. Por favor intenta nuevamente.');
+                                  }
+                                } catch (error) {
+                                  console.error('Error eliminando plano:', error);
+                                  alert('Ocurrió un error al intentar eliminar el plano.');
                                 }
                               }}
                               className="text-red-600 hover:text-red-900 flex items-center gap-1"

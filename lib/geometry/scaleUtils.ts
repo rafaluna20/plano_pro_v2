@@ -103,6 +103,30 @@ export function utmToPaper(
 }
 
 /**
+ * Convierte coordenadas UTM a coordenadas de papel (mm) usando un centroide personalizado
+ * Útil para dibujar elementos de contexto relativos al lote principal
+ */
+export function utmToPaperRelative(
+  vertices: UTMCoordinate[],
+  centerUtm: [number, number],
+  escala: number,
+  centerX: number,
+  centerY: number
+): Array<[number, number]> {
+  return vertices.map(([x, y]) => {
+    // Trasladar relativo al centroide proporcionado (del lote principal)
+    const relX = x - centerUtm[0];
+    const relY = y - centerUtm[1];
+
+    // Escalar y convertir a mm
+    const paperX = centerX + metrosAPapel(relX, escala);
+    const paperY = centerY - metrosAPapel(relY, escala); // Invertir Y para PDF
+
+    return [paperX, paperY];
+  });
+}
+
+/**
  * Calcula las dimensiones del dibujo en papel
  */
 export function getDimensionesEnPapel(

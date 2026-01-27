@@ -82,19 +82,19 @@ export class PlanoGenerator {
         {
           condition: !!this.config.incluirMemoriaDescriptiva,
           generator: new MemoriaDescriptivaGenerator(this.request, this.config),
-          format: this.config.formatosPersonalizados!.memoriaDescriptiva,
+          format: this.config.formatosPersonalizados!.memoriaDescriptiva as { formato: any; orientacion: any },
           name: 'Memoria Descriptiva'
         },
         {
           condition: !!this.config.incluirPlanoPerimetrico,
           generator: new PlanoPerimetricoGenerator(this.request, this.config),
-          format: this.config.formatosPersonalizados!.planoPerimetrico,
+          format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
           name: 'Plano Perimétrico'
         },
         {
           condition: !!this.config.incluirPlanoUbicacion,
           generator: new PlanoUbicacionGenerator(this.request, this.config),
-          format: this.config.formatosPersonalizados!.planoUbicacion,
+          format: this.config.formatosPersonalizados!.planoUbicacion as { formato: any; orientacion: any },
           name: 'Plano Ubicación'
         }
       ];
@@ -131,9 +131,9 @@ export class PlanoGenerator {
    * Determina el formato de la primera página
    */
   private getInitialFormat(): { formato: string; orientacion: 'portrait' | 'landscape' } {
-    if (this.config.incluirMemoriaDescriptiva) return this.config.formatosPersonalizados!.memoriaDescriptiva;
-    if (this.config.incluirPlanoPerimetrico) return this.config.formatosPersonalizados!.planoPerimetrico;
-    if (this.config.incluirPlanoUbicacion) return this.config.formatosPersonalizados!.planoUbicacion;
+    if (this.config.incluirMemoriaDescriptiva) return this.config.formatosPersonalizados!.memoriaDescriptiva as { formato: string; orientacion: 'portrait' | 'landscape' };
+    if (this.config.incluirPlanoPerimetrico) return this.config.formatosPersonalizados!.planoPerimetrico as { formato: string; orientacion: 'portrait' | 'landscape' };
+    if (this.config.incluirPlanoUbicacion) return this.config.formatosPersonalizados!.planoUbicacion as { formato: string; orientacion: 'portrait' | 'landscape' };
     return { formato: 'A4', orientacion: 'portrait' };
   }
 
@@ -168,8 +168,9 @@ export class PlanoGenerator {
   getMetadata() {
     // Detectar estrategia usada
     let contextStrategy = 'NONE';
-    if (this.request.contexto?.elementos?.length > 0) contextStrategy = 'VECTOR_HIGH_PRECISION';
-    else if (this.request.imagenContexto?.data) contextStrategy = 'SNAPSHOT_LEAFLET';
+    const elementos = (this.request.contexto as any)?.elementos || (this.request.contexto?.lotesVecinos);
+    if (elementos && elementos.length > 0) contextStrategy = 'VECTOR_HIGH_PRECISION';
+    else if ((this.request as any).imagenContexto?.data) contextStrategy = 'SNAPSHOT_LEAFLET';
     else contextStrategy = 'MAP_SERVER_FALLBACK';
 
     return {

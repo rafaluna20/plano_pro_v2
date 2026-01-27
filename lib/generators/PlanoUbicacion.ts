@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
 import { calculateCentroid, utmToLatLng, getBoundingBox } from '@/lib/geometry/utmUtils';
-import { utmToPaper, metrosAPapel } from '@/lib/geometry/scaleUtils';
+import { utmToPaper, utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { MapService } from '@/lib/services/MapService';
 
 /**
@@ -21,7 +21,7 @@ export class PlanoUbicacionGenerator {
   }
 
   async generate(pdf: jsPDF): Promise<void> {
-    const { vertices, lote, dimensiones, propietario, contexto, imagenContexto } = this.request;
+    const { vertices, lote, dimensiones, propietario, contexto, imagenContexto } = this.request as any;
     const cad = new CADDrawing(pdf);
     const pageWidth = pdf.internal.pageSize.width;
     const pageHeight = pdf.internal.pageSize.height;
@@ -59,8 +59,11 @@ export class PlanoUbicacionGenerator {
     // ========== 3. CÁLCULO DE ESCALA (Contextual) ==========
     // A diferencia del perimétrico, aquí intentamos encuadrar a los VECINOS también.
     let verticesParaEscala = [...vertices];
-    if (contexto && contexto.elementos && contexto.elementos.length > 0) {
-      contexto.elementos.forEach(vecino => {
+    // Normalizar contexto (soporte para lotesVecinos y elementos)
+    const vecinos = contexto?.lotesVecinos || (contexto as any)?.elementos || [];
+
+    if (vecinos.length > 0) {
+      vecinos.forEach((vecino: any) => {
         if (vecino.vertices) verticesParaEscala.push(...vecino.vertices);
       });
     }
@@ -80,11 +83,11 @@ export class PlanoUbicacionGenerator {
     let fondoDibujado = false;
 
     // PRIORIDAD 1: VECTORES (Coordenadas de contexto)
-    if (contexto && contexto.elementos && contexto.elementos.length > 0) {
+    if (vecinos.length > 0) {
       // console.log('Ubicación: Prioridad 1 (Vectores)');
-      this.renderVectorialContext(pdf, cad, contexto.elementos, escala, cx, cy, centroDrawing);
+      this.renderVectorialContext(pdf, cad, vecinos, escala, cx, cy, centroDrawing);
       fondoDibujado = true;
-    } 
+    }
     // PRIORIDAD 2: IMAGEN (Captura de Pantalla)
     else if (imagenContexto && imagenContexto.data) {
       // console.log('Ubicación: Prioridad 2 (Imagen)');
@@ -110,14 +113,9 @@ export class PlanoUbicacionGenerator {
     
     // Fix: utmToPaper necesita el centroide relativo
     // Reimplementamos transformación local para asegurar consistencia con el contexto
-    const fixedPaperPoints = vertices.map(v => {
-      const dx = v[0] - centroDrawing[0];
-      const dy = v[1] - centroDrawing[1];
-      return [
-        cx + metrosAPapel(dx, escala),
-        cy - metrosAPapel(dy, escala)
-      ] as [number, number];
-    });
+    // Fix: utmToPaper necesita el centroide relativo
+    // Reimplementamos transformación local para asegurar consistencia con el contexto
+    const fixedPaperPoints = utmToPaperRelative(vertices, centroDrawing, escala, cx, cy);
 
     cad.drawPolygon(fixedPaperPoints, { 
       strokeColor: '#000000', 
@@ -166,14 +164,8 @@ export class PlanoUbicacionGenerator {
       if (!el.vertices) return;
 
       // Transformación manual para asegurar que todo gire en torno al mismo centro (Lote Principal)
-      const pts = el.vertices.map((v: number[]) => {
-        const dx = v[0] - realCenter[0];
-        const dy = v[1] - realCenter[1];
-        return [
-          paperCx + metrosAPapel(dx, escala),
-          paperCy - metrosAPapel(dy, escala)
-        ] as [number, number];
-      });
+      // Usamos la nueva función centralizada para consistencia
+      const pts = utmToPaperRelative(el.vertices, realCenter, escala, paperCx, paperCy);
 
       // Estilo Vecino
       const isAreaVerde = el.tipo === 'AREA_VERDE';
@@ -205,7 +197,7 @@ export class PlanoUbicacionGenerator {
       // Overlay blanco suave
       pdf.saveGraphicsState();
       pdf.setGState(new (pdf as any).GState({ opacity: 0.3 }));
-      pdf.setFillColor(255);
+      pdf.setFillColor(255, 255, 255);
       pdf.rect(area.x, area.y, area.width, area.height, 'F');
       pdf.restoreGraphicsState();
     } catch (e) {
@@ -287,7 +279,7 @@ export class PlanoUbicacionGenerator {
     
     pdf.setFillColor(50, 50, 50); 
     pdf.rect(x, currY, width, 8, 'F');
-    pdf.setTextColor(255); 
+    pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(9); 
     pdf.setFont('helvetica', 'bold');
     pdf.text('DATOS GENERALES', x + width / 2, currY + 5, { align: 'center' });
@@ -328,7 +320,7 @@ export class PlanoUbicacionGenerator {
 
     pdf.setFillColor(50, 50, 50); 
     pdf.rect(x, currY, width, 8, 'F');
-    pdf.setTextColor(255); 
+    pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(9); 
     pdf.setFont('helvetica', 'bold');
     pdf.text('COORDENADAS CENTROIDE', x + width / 2, currY + 5, { align: 'center' });
@@ -338,7 +330,7 @@ export class PlanoUbicacionGenerator {
     pdf.setFontSize(8);
     
     // Fila 1: UTM
-    pdf.setFillColor(240);
+    pdf.setFillColor(240, 240, 240);
     pdf.rect(x, currY - 4, width, 14, 'F');
     pdf.setFont('helvetica', 'bold'); 
     pdf.text('SISTEMA WGS84 - ZONA 18S', x + width/2, currY, {align:'center'});
@@ -365,7 +357,7 @@ export class PlanoUbicacionGenerator {
     // Header
     pdf.setFillColor(50, 50, 50); 
     pdf.rect(x, y, width, 6, 'F');
-    pdf.setTextColor(255); 
+    pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(8); 
     pdf.text('MACRO LOCALIZACIÓN', x + width/2, y + 4, { align: 'center' });
     

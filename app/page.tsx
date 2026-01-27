@@ -761,7 +761,8 @@ export default function EditorPlanos() {
           lotesVecinos: data.contexto.vecinos.map(v => ({
             codigo: v.codigo || v.nombre,
             vertices: v.vertices.map(vt => [vt.x, vt.y] as [number, number]),
-            estado: v.estado || 'libre'
+            estado: v.estado || 'libre',
+            texto: v.nombre.replace(/[^0-9]/g, '') || v.id // Extraer número para etiqueta
           }))
         } : undefined
       };

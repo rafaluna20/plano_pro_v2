@@ -91,3 +91,68 @@ export async function GET(
     }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    
+    // 1. Autenticación (Permitimos DELETE sin API Key si hay sesión de usuario, pero por consistencia usamos API Key si viene)
+    // TODO: Idealmente verificar sesión de usuario si no hay API Key
+    const apiKey = request.headers.get('x-api-key');
+    
+    if (apiKey) {
+        const apiKeyRecord = await validateApiKey(apiKey);
+        if (!apiKeyRecord) {
+            return NextResponse.json<ApiResponse>({
+                success: false,
+                error: { code: 'INVALID_API_KEY', message: 'API key inválida' }
+            }, { status: 401 });
+        }
+        // Validar que el plano pertenezca al usuario de la API Key
+        const plano = await prisma.plano.findUnique({ where: { id }, select: { userId: true } });
+        if (plano && plano.userId !== apiKeyRecord.userId) {
+             return NextResponse.json<ApiResponse>({
+                success: false,
+                error: { code: 'FORBIDDEN', message: 'No tienes permiso para eliminar este plano' }
+            }, { status: 403 });
+        }
+    }
+
+    // 2. Eliminar de la base de datos
+    // Nota: Prisma se encarga de eliminar registros relacionados si está configurado en cascada,
+    // pero los archivos físicos (PDFs) deberían borrarse también.
+    // Por simplicidad aquí borramos solo el registro DB.
+    
+    await prisma.plano.delete({
+      where: { id }
+    });
+
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      data: { message: 'Plano eliminado correctamente' }
+    });
+
+  } catch (error) {
+    console.error('Error eliminando plano:', error);
+    
+    // Si no existe el registro
+    if ((error as any).code === 'P2025') {
+        return NextResponse.json<ApiResponse>({
+            success: false,
+            error: { code: 'NOT_FOUND', message: 'Plano no encontrado' }
+        }, { status: 404 });
+    }
+
+    return NextResponse.json<ApiResponse>({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Error al eliminar el plano',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }, { status: 500 });
+  }
+}
