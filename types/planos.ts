@@ -1,0 +1,123 @@
+// Reutilizar del documento arquitectónico principal
+export type UTMCoordinate = [number, number];
+
+export interface Colindancia {
+  lado: 'norte' | 'sur' | 'este' | 'oeste' | 'frente' | 'fondo' | 'derecha' | 'izquierda';
+  tipo: 'lote' | 'calle' | 'area_verde' | 'area_comun';
+  nombre: string;
+  propietario?: string;
+  coordinates?: UTMCoordinate[];
+}
+
+export interface Dimensiones {
+  frente: number;
+  fondo: number;
+  ladoDerecho: number;
+  ladoIzquierdo: number;
+  area: number;
+  perimetro: number;
+}
+
+export interface Propietario {
+  nombre: string;
+  dni?: string;
+  ruc?: string;
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+}
+
+export interface LoteMetadata {
+  codigo: string;
+  nombre: string;
+  manzana: string;
+  etapa: string;
+  numeroLote: string;
+  estado: 'libre' | 'separado' | 'vendido';
+  precio?: number;
+  fechaRegistro?: string;
+  // Ubicación detallada (opcional)
+  ubicacion?: {
+    departamento?: string;
+    provincia?: string;
+    distrito?: string;
+    urbanizacion?: string;
+    direccion?: string;
+  };
+}
+
+export interface PlanoConfig {
+  incluirMemoriaDescriptiva: boolean;
+  incluirPlanoPerimetrico: boolean;
+  incluirPlanoUbicacion: boolean;
+  formatoPapel?: 'A4' | 'A3' | 'A2' | 'Legal';
+  orientacion?: 'portrait' | 'landscape';
+  escala?: string;
+  incluirColindantesEnPlano: boolean;
+  formatosPersonalizados?: {
+    memoriaDescriptiva?: {
+      formato: 'A4' | 'A3' | 'A2' | 'Legal';
+      orientacion: 'portrait' | 'landscape';
+    };
+    planoPerimetrico?: {
+      formato: 'A4' | 'A3' | 'A2' | 'Legal';
+      orientacion: 'portrait' | 'landscape';
+    };
+    planoUbicacion?: {
+      formato: 'A4' | 'A3' | 'A2' | 'Legal';
+      orientacion: 'portrait' | 'landscape';
+    };
+  };
+}
+
+// Payload de la API
+export interface GenerarPlanosRequest {
+  vertices: UTMCoordinate[];
+  dimensiones: Dimensiones;
+  lote: LoteMetadata;
+  colindancias: Colindancia[];
+  propietario?: Propietario;
+  config?: Partial<PlanoConfig>;
+  contexto?: {
+    lotesVecinos?: Array<{
+      codigo: string;
+      vertices: UTMCoordinate[];
+      estado: string;
+    }>;
+    radioBusqueda?: number;
+    elementos?: Array<{
+      tipo: string;
+      codigo: string;
+      texto?: string;
+      estado: string;
+      vertices: UTMCoordinate[];
+    }>;
+  };
+  imagenContexto?: {
+    tipo: string;
+    data: string;
+  };
+}
+
+export interface GenerarPlanosResponse {
+  success: boolean;
+  data?: {
+    planoId: string;
+    jobId?: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    pdfUrl?: string;
+    pdfBase64?: string;
+    metadata: {
+      loteCodigo: string;
+      fechaGeneracion: string;
+      documentosIncluidos: string[];
+      tamanoPDF?: number;
+      numeroPaginas?: number;
+    };
+  };
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+}

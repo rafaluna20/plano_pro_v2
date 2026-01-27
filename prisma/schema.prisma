@@ -1,0 +1,160 @@
+// Configuración del generador de cliente
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Configuración de la base de datos
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// MODELO DE USUARIOS Y ROLES
+// ==========================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  role          UserRole  @default(USER)
+  
+  // Relaciones
+  apiKeys       ApiKey[]
+  planos        Plano[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  API_CLIENT
+}
+
+// ==========================================
+// API KEYS (ACCESO EXTERNO)
+// ==========================================
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  key           String    @unique  // Hash de la API Key real
+  name          String               // Nombre descriptivo (ej: "App Terralima Producción")
+  prefix        String               // Primeros caracteres visibles para identificarla
+  
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  permissions   String[]             // Ej: ["planos:generate", "planos:read"]
+  rateLimit     Int       @default(100)  // Límite de peticiones por hora
+  
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  isActive      Boolean   @default(true)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("api_keys")
+  @@index([userId])
+}
+
+// ==========================================
+// MODELO PRINCIPAL: PLANOS
+// ==========================================
+
+model Plano {
+  id            String     @id @default(cuid())
+  
+  // --- Identificación del Lote ---
+  loteCodigo    String               // Ej: "E01MZC014P"
+  loteNombre    String               // Ej: "Lote 14 - Manzana C - Etapa 1"
+  manzana       String
+  etapa         String
+  numeroLote    String
+  
+  // --- Geometría y Datos Técnicos (JSON) ---
+  vertices      Json                 // Array de coordenadas [x, y]
+  dimensiones   Json                 // Objeto con {frente, fondo, area, perimetro...}
+  
+  // Colindancias Detalladas
+  // Almacena array de objetos: [{ lado: "FRENTE", tipo: "calle", nombre: "...", longitud: 10.00 }]
+  colindancias  Json                 
+  
+  // [MEJORA] Contexto Vectorial
+  // Almacena la geometría de los vecinos para poder regenerar el plano idéntico en el futuro.
+  // Estructura: { radioBusqueda: 50, elementos: [{ tipo: "LOTE", vertices: [...] }] }
+  contexto      Json?                
+  
+  // --- Metadatos Adicionales ---
+  propietario   Json?                // Datos del cliente/propietario
+  
+  // --- Archivos Resultantes ---
+  pdfUrl        String?              // URL pública/privada del PDF generado en S3/Blob
+  pdfSize       Int?                 // Tamaño en bytes
+  thumbnailUrl  String?              // Imagen previa del plano
+  
+  // --- Estado del Proceso (Job Queue) ---
+  status        PlanoStatus @default(PENDING)
+  jobId         String?              // ID del trabajo en BullMQ/Redis
+  errorMessage  String?              // Mensaje de error si falla
+  
+  // --- Configuración Usada ---
+  config        Json                 // Configuración específica de esa generación (escala, formatos)
+  
+  // --- Auditoría ---
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+  source        String     @default("api")  // Origen: "api", "dashboard", "app-movil"
+  
+  generatedAt   DateTime?            // Fecha exacta de finalización
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@map("planos")
+  @@index([loteCodigo])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum PlanoStatus {
+  PENDING      // Encolado, esperando worker
+  PROCESSING   // Generándose actualmente
+  COMPLETED    // PDF listo y subido
+  FAILED       // Error en generación
+  CANCELLED    // Cancelado por usuario o timeout
+}
+
+// ==========================================
+// LOGS DE AUDITORÍA API
+// ==========================================
+
+model ApiLog {
+  id            String    @id @default(cuid())
+  
+  apiKeyId      String?
+  endpoint      String
+  method        String
+  statusCode    Int
+  duration      Int                  // Duración en milisegundos
+  
+  ipAddress     String?
+  userAgent     String?
+  
+  requestBody   Json?                // Opcional: guardar payload (cuidado con datos sensibles)
+  responseBody  Json?                // Opcional: guardar respuesta
+  metadata      Json?                // Metadatos extra (ej: estrategia de contexto usada)
+  errorMessage  String?
+  
+  createdAt     DateTime  @default(now())
+  
+  @@map("api_logs")
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@index([endpoint])
+}

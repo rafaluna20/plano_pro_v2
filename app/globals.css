@@ -1,8 +1,101 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* ============================================
+   Sistema de Diseño - Editor Profesional
+   ============================================ */
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Colores Primarios */
+  --primary-blue: #0066CC;
+  --primary-dark: #004499;
+  --primary-light: #3388DD;
+
+  /* Colores de Estado */
+  --success-green: #10B981;
+  --warning-amber: #F59E0B;
+  --error-red: #EF4444;
+  --info-cyan: #06B6D4;
+
+  /* Grises Profesionales */
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-600: #4B5563;
+  --gray-700: #374151;
+  --gray-800: #1F2937;
+  --gray-900: #111827;
+
+  /* Colores de Capas */
+  --layer-lote: #3B82F6;
+  --layer-calle: #10B981;
+  --layer-area-verde: #22C55E;
+  --layer-area-comun: #8B5CF6;
+  --layer-construccion: #F59E0B;
+  --layer-selected: #EC4899;
+
+  /* Sombras */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
+  /* Duraciones de Animación */
+  --duration-instant: 100ms;
+  --duration-fast: 200ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+
+  /* Easing */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* ============================================
+   TEMA OSCURO PROFESIONAL (AutoCAD Style)
+   ============================================ */
+
+[data-theme='dark'] {
+  /* Backgrounds CAD */
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  
+  /* Canvas Colors */
+  --cad-canvas-bg: #1e293b;
+  --cad-canvas-grid: rgba(148, 163, 184, 0.15);
+  --cad-line-default: #f1f5f9;
+  --cad-line-selected: #22d3ee;
+  --cad-line-hover: #c4b5fd;
+  
+  /* UI Colors */
+  --gray-50: #1e293b;
+  --gray-100: #334155;
+  --gray-200: #475569;
+  --gray-300: #64748b;
+  --gray-400: #94a3b8;
+  --gray-500: #cbd5e1;
+  --gray-600: #e2e8f0;
+  --gray-700: #f1f5f9;
+  --gray-800: #f8fafc;
+  --gray-900: #ffffff;
+  
+  /* Ajustar colores primarios para dark */
+  --primary-blue: #3b82f6;
+  --primary-dark: #2563eb;
+  --primary-light: #60a5fa;
+  
+  /* Sombras más sutiles en dark */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
 }
 
 @theme inline {
@@ -12,15 +105,131 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ============================================
+   Clases de Utilidad para el Editor
+   ============================================ */
+
+.editor-panel {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-button {
+  padding: 0.5rem 1rem;
+  background: var(--primary-blue);
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.editor-button:hover {
+  background: var(--primary-dark);
+  box-shadow: var(--shadow-md);
+}
+
+.editor-button:active {
+  transform: scale(0.98);
+}
+
+.editor-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.editor-input:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.tool-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1px solid var(--gray-300);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.tool-button:hover {
+  background: var(--gray-50);
+  border-color: var(--primary-blue);
+}
+
+.tool-button.active {
+  background: var(--primary-blue);
+  color: white;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2);
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.layer-item:hover {
+  background: var(--gray-50);
+}
+
+.layer-item.selected {
+  background: var(--primary-blue);
+  color: white;
+}
+
+.validation-error {
+  color: var(--error-red);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.validation-warning {
+  color: var(--warning-amber);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.validation-success {
+  color: var(--success-green);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn var(--duration-normal) var(--ease-out);
 }
