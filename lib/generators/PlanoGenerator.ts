@@ -1,8 +1,11 @@
 import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { MemoriaDescriptivaGenerator } from './MemoriaDescriptiva';
-import { PlanoPerimetricoGenerator } from './PlanoPerimetrico';
+import { PlanoPerimetricoGenerator } from './PlanoPerimetrico'; // Mantener como fallback o eliminar si estamos seguros
+import { PlanoPerimetricoGeneratorV2 } from './PlanoPerimetricoGeneratorV2';
 import { PlanoUbicacionGenerator } from './PlanoUbicacion';
+import { PlanoRequestAdapter } from './PlanoRequestAdapter';
+import { procesarDatosPlano } from '@/lib/services/PlanoDataProcessor';
 
 // Interfaz para estandarizar los generadores hijos
 interface IDocumentGenerator {
@@ -11,10 +14,11 @@ interface IDocumentGenerator {
 
 /**
  * Orquestador Principal de Generación de Planos (Proyecto Terra Lima)
- * * MEJORAS:
+ * * MEJORAS (V2 Integration):
  * - Gestión inteligente de formatos mixtos (A4 para textos, A3 para gráficos).
  * - Detección de estrategia de contexto para metadatos.
  * - Manejo robusto de errores por documento.
+ * - Integración con Motor Híbrido V2.
  */
 export class PlanoGenerator {
   private config: PlanoConfig;
@@ -40,17 +44,17 @@ export class PlanoGenerator {
     return {
       ...baseConfig,
       formatosPersonalizados: {
-        memoriaDescriptiva: inputConfig?.formatosPersonalizados?.memoriaDescriptiva || { 
-          formato: 'A4', 
-          orientacion: 'portrait' 
+        memoriaDescriptiva: inputConfig?.formatosPersonalizados?.memoriaDescriptiva || {
+          formato: 'A4',
+          orientacion: 'portrait'
         },
-        planoPerimetrico: inputConfig?.formatosPersonalizados?.planoPerimetrico || { 
+        planoPerimetrico: inputConfig?.formatosPersonalizados?.planoPerimetrico || {
           formato: 'A3', // Estándar para planos municipales
-          orientacion: 'landscape' 
+          orientacion: 'landscape'
         },
-        planoUbicacion: inputConfig?.formatosPersonalizados?.planoUbicacion || { 
-          formato: 'A3', 
-          orientacion: 'landscape' 
+        planoUbicacion: inputConfig?.formatosPersonalizados?.planoUbicacion || {
+          formato: 'A3',
+          orientacion: 'landscape'
         },
       },
     } as PlanoConfig;
@@ -61,10 +65,15 @@ export class PlanoGenerator {
    */
   async generate(): Promise<Buffer> {
     try {
+      // 0. PRE-PROCESAMIENTO V2 (Híbrido)
+      // Convertimos el request legacy al payload V2 y procesamos los datos
+      const hybridPayload = PlanoRequestAdapter.toHybridPayload(this.request);
+      const datosProcesados = await procesarDatosPlano(hybridPayload);
+
       // 1. Setup Inicial
       // Iniciamos con el formato del primer documento activo para evitar páginas en blanco
       const initialSetup = this.getInitialFormat();
-      
+
       const pdf = new jsPDF({
         orientation: initialSetup.orientacion as 'portrait' | 'landscape',
         unit: 'mm',
@@ -79,25 +88,26 @@ export class PlanoGenerator {
         format: { formato: any; orientacion: any };
         name: string;
       }> = [
-        {
-          condition: !!this.config.incluirMemoriaDescriptiva,
-          generator: new MemoriaDescriptivaGenerator(this.request, this.config),
-          format: this.config.formatosPersonalizados!.memoriaDescriptiva as { formato: any; orientacion: any },
-          name: 'Memoria Descriptiva'
-        },
-        {
-          condition: !!this.config.incluirPlanoPerimetrico,
-          generator: new PlanoPerimetricoGenerator(this.request, this.config),
-          format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
-          name: 'Plano Perimétrico'
-        },
-        {
-          condition: !!this.config.incluirPlanoUbicacion,
-          generator: new PlanoUbicacionGenerator(this.request, this.config),
-          format: this.config.formatosPersonalizados!.planoUbicacion as { formato: any; orientacion: any },
-          name: 'Plano Ubicación'
-        }
-      ];
+          {
+            condition: !!this.config.incluirMemoriaDescriptiva,
+            generator: new MemoriaDescriptivaGenerator(this.request, this.config),
+            format: this.config.formatosPersonalizados!.memoriaDescriptiva as { formato: any; orientacion: any },
+            name: 'Memoria Descriptiva'
+          },
+          {
+            condition: !!this.config.incluirPlanoPerimetrico,
+            // Usamos el generador V2 inyectando los datos ya procesados
+            generator: new PlanoPerimetricoGeneratorV2(hybridPayload, datosProcesados),
+            format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
+            name: 'Plano Perimétrico'
+          },
+          {
+            condition: !!this.config.incluirPlanoUbicacion,
+            generator: new PlanoUbicacionGenerator(this.request, this.config),
+            format: this.config.formatosPersonalizados!.planoUbicacion as { formato: any; orientacion: any },
+            name: 'Plano Ubicación'
+          }
+        ];
 
       // 3. Ejecución de la Cola
       let pagesAdded = 0;
@@ -111,7 +121,7 @@ export class PlanoGenerator {
               task.format.orientacion
             );
           }
-          
+
           // console.log(`Generando documento: ${task.name}...`);
           await task.generator.generate(pdf);
           pagesAdded++;
@@ -182,7 +192,7 @@ export class PlanoGenerator {
         ubicacion: this.config.incluirPlanoUbicacion,
         estrategiaContexto: contextStrategy // Dato valioso para debugging
       },
-      version: '2.1.0-terralima'
+      version: '2.1.0-terralima (V2 Hybrid Engine)'
     };
   }
 }

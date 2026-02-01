@@ -1,0 +1,220 @@
+{
+
+
+
+
+  "meta": {
+    "solicitudId": "REQ-HYBRID-001",
+    "timestamp": "2024-02-01T15:00:00Z",
+    "crs": "EPSG:32718",
+    "logicaAplicada": "PRIORIDAD_REGISTRAL_CON_FALLBACK_GEOMETRICO"
+  },
+
+
+
+
+  "loteObjetivo": {
+    "type": "Feature",
+    "id": "LOTE-ESQUINA-14",
+    "properties": {
+      "codigoInterno": "E01MZC014P",
+      "identificador": {
+        "manzana": "C",
+        "lote": "14",
+        "subLote": "A",
+        "etapa": "Etapa 1",
+        "urbanizacion": "Los Cedros Residencial"
+      },
+      "comercial": {
+        "precio": 165000.00,
+        "moneda": "USD",
+        "estado": "vendido",
+        "fechaVenta": "2024-01-20"
+      },
+      "ubicacion": {
+        "departamento": "Lima",
+        "provincia": "Lima",
+        "distrito": "San Juan de Lurigancho",
+        "direccion": "Esq. Av. Los Alamos con Calle Los Pinos"
+      },
+      "titularidad": {
+        "nombre": "Inversiones Santa Rosa S.A.C.",
+        "documento": {
+          "tipo": "RUC",
+          "numero": "20555555551"
+        },
+        "partidaRegistral": "11023456"
+      }
+    },
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [284500.00, 8670100.00],
+          [284508.00, 8670100.00],
+          [284510.00, 8670098.00],
+          [284510.00, 8670080.00],
+          [284500.00, 8670080.00],
+          [284500.00, 8670100.00]
+        ]
+      ]
+    }
+  },
+
+
+
+
+  "datosRegistrales": {
+    "areaOficial": 198.00,
+    "perimetroOficial": 58.83,
+    "linderos": [
+      {
+        "index": 0,
+        "tramo": "V1 - V2",
+        "longitudTexto": "8.00",
+        "colindanciaTexto": "Av. Los Alamos",
+        "orientacion": "FRENTE"
+      },
+      {
+        "index": 1,
+        "tramo": "V2 - V3",
+        "longitudTexto": "2.83",
+        "colindanciaTexto": "Ochavo",
+        "orientacion": "ESQUINA"
+      },
+      {
+        "index": 2,
+        "tramo": "V3 - V4",
+        "longitudTexto": "18.00",
+        "colindanciaTexto": "Calle Los Pinos",
+        "orientacion": "DERECHA"
+      },
+      {
+        "index": 3,
+        "tramo": "V4 - V5",
+        "longitudTexto": "10.00",
+        "colindanciaTexto": "Lote 05",
+        "orientacion": "FONDO"
+      },
+      {
+        "index": 4,
+        "tramo": "V5 - V1",
+        "longitudTexto": "20.00",
+        "colindanciaTexto": "Lote 13",
+        "orientacion": "IZQUIERDA"
+      }
+    ]
+  },
+
+
+
+
+  "contexto": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "tipo": "calle",
+          "nombre": "Av. Los Alamos",
+          "anchoVia": 12.00,
+          "posicionRelativa": "NORTE"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [284490.00, 8670112.00],
+              [284520.00, 8670112.00],
+              [284520.00, 8670100.00],
+              [284490.00, 8670100.00],
+              [284490.00, 8670112.00]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "tipo": "calle",
+          "nombre": "Calle Los Pinos",
+          "anchoVia": 10.00,
+          "posicionRelativa": "ESTE"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [284510.00, 8670100.00],
+              [284522.00, 8670100.00],
+              [284522.00, 8670070.00],
+              [284510.00, 8670070.00],
+              [284510.00, 8670100.00]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "tipo": "lote",
+          "numeroLote": "05",
+          "estado": "ocupado",
+          "descripcionAlterna": "Propiedad de Terceros"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [284500.00, 8670080.00],
+              [284510.00, 8670080.00],
+              [284510.00, 8670060.00],
+              [284500.00, 8670060.00],
+              [284500.00, 8670080.00]
+            ]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "tipo": "lote",
+          "numeroLote": "13",
+          "estado": "libre"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [284490.00, 8670100.00],
+              [284500.00, 8670100.00],
+              [284500.00, 8670080.00],
+              [284490.00, 8670080.00],
+              [284490.00, 8670100.00]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+
+
+
+  
+  "configImpresion": {
+    "incluirMemoriaDescriptiva": true,
+    "incluirPlanoPerimetrico": true,
+    "incluirPlanoUbicacion": true,
+    "formatoPapel": "A3",
+    "orientacion": "landscape",
+    "escala": "1/500",
+    "estilos": {
+      "mostrarCotas": true,
+      "mostrarGrilla": true,
+      "colorLote": "#FFFFFF",
+      "colorContexto": "#F0F0F0",
+      "grosorLineaContexto": 0.1,
+      "grosorLineaLote": 0.7
+    }
+  }
+}

@@ -1,0 +1,354 @@
+{
+  "_comment": "Payloads de Prueba para Sistema Híbrido de Planos Perimétricos",
+  "_autor": "Sistema QA - Generación Híbrida V2",
+  "_fecha": "2026-01-31",
+
+  "escenario_1_happy_path_registral": {
+    "_descripcion": "Escenario Happy Path - Datos Registrales Completos",
+    "_esperado": "PDF debe mostrar 10.00m en lado FRENTE (texto registral prevalece sobre geometría)",
+    
+    "meta": {
+      "solicitudId": "TEST-REGISTRAL-001",
+      "fechaSolicitud": "2026-01-31T08:00:00Z",
+      "solicitante": "QA Tester"
+    },
+
+    "loteObjetivo": {
+      "type": "Feature",
+      "properties": {
+        "identificador": {
+          "manzana": "A",
+          "lote": "5",
+          "urbanizacion": "Los Jardines del Valle"
+        },
+        "comercial": {
+          "nombreComercial": "Lote 5 - Residencial"
+        },
+        "ubicacion": {
+          "direccion": "Av. Los Alamos 456",
+          "distrito": "San Isidro",
+          "provincia": "Lima",
+          "departamento": "Lima"
+        },
+        "titularidad": {
+          "nombre": "Juan Pérez García",
+          "documento": {
+            "tipo": "DNI",
+            "numero": "12345678"
+          }
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [276500.50, 8664200.75],
+            [276510.48, 8664200.75],
+            [276510.48, 8664220.73],
+            [276500.50, 8664220.73],
+            [276500.50, 8664200.75]
+          ]
+        ]
+      }
+    },
+
+    "datosRegistrales": {
+      "areaOficial": 199.60,
+      "perimetroOficial": 59.96,
+      "linderos": [
+        {
+          "index": 0,
+          "tramo": "V1 - V2",
+          "longitudTexto": "10.00",
+          "colindanciaTexto": "Av. Los Alamos",
+          "orientacion": "FRENTE"
+        },
+        {
+          "index": 1,
+          "tramo": "V2 - V3",
+          "longitudTexto": "19.98",
+          "colindanciaTexto": "Lote 6",
+          "orientacion": "DERECHA"
+        },
+        {
+          "index": 2,
+          "tramo": "V3 - V4",
+          "longitudTexto": "9.98",
+          "colindanciaTexto": "Lote 4",
+          "orientacion": "FONDO"
+        },
+        {
+          "index": 3,
+          "tramo": "V4 - V1",
+          "longitudTexto": "20.00",
+          "colindanciaTexto": "Pasaje Comercio",
+          "orientacion": "IZQUIERDA"
+        }
+      ]
+    },
+
+    "contexto": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "tipo": "calle",
+            "nombre": "Av. Los Alamos"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [276490.00, 8664195.00],
+                [276520.00, 8664195.00],
+                [276520.00, 8664200.75],
+                [276490.00, 8664200.75],
+                [276490.00, 8664195.00]
+              ]
+            ]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "tipo": "lote",
+            "numeroLote": "6"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [276510.48, 8664200.75],
+                [276520.00, 8664200.75],
+                [276520.00, 8664220.73],
+                [276510.48, 8664220.73],
+                [276510.48, 8664200.75]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+
+    "configImpresion": {
+      "formatoPapel": "a3",
+      "orientacion": "landscape",
+      "incluirNorte": true,
+      "incluirEscala": true,
+      "estilos": {
+        "colorLotePrincipal": "#000000",
+        "colorVecinos": "#CCCCCC"
+      }
+    }
+  },
+
+  "escenario_2_fallback_geometrico": {
+    "_descripcion": "Escenario Fallback - Sin Datos Registrales (Cálculo Automático)",
+    "_esperado": "Sistema calcula todo desde geometría y detecta colindancia con 'Av. Los Alamos' automáticamente",
+    
+    "meta": {
+      "solicitudId": "TEST-FALLBACK-002",
+      "fechaSolicitud": "2026-01-31T08:00:00Z",
+      "solicitante": "QA Tester"
+    },
+
+    "loteObjetivo": {
+      "type": "Feature",
+      "properties": {
+        "identificador": {
+          "manzana": "B",
+          "lote": "12",
+          "urbanizacion": "Villa Hermosa"
+        },
+        "comercial": {
+          "nombreComercial": "Lote 12 - Comercial"
+        },
+        "ubicacion": {
+          "direccion": "Av. Los Alamos 789",
+          "distrito": "San Isidro",
+          "provincia": "Lima",
+          "departamento": "Lima"
+        },
+        "titularidad": {
+          "nombre": "María González López",
+          "documento": {
+            "tipo": "DNI",
+            "numero": "87654321"
+          }
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [276600.00, 8664300.00],
+            [276615.00, 8664300.00],
+            [276615.00, 8664320.00],
+            [276600.00, 8664320.00],
+            [276600.00, 8664300.00]
+          ]
+        ]
+      }
+    },
+
+    "datosRegistrales": {
+      "areaOficial": null,
+      "perimetroOficial": null,
+      "linderos": null
+    },
+
+    "contexto": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "tipo": "calle",
+            "nombre": "Av. Los Alamos"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [276590.00, 8664295.00],
+                [276625.00, 8664295.00],
+                [276625.00, 8664300.00],
+                [276590.00, 8664300.00],
+                [276590.00, 8664295.00]
+              ]
+            ]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": {
+            "tipo": "lote",
+            "numeroLote": "13"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [276615.00, 8664300.00],
+                [276630.00, 8664300.00],
+                [276630.00, 8664320.00],
+                [276615.00, 8664320.00],
+                [276615.00, 8664300.00]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+
+    "configImpresion": {
+      "formatoPapel": "a3",
+      "orientacion": "landscape",
+      "incluirNorte": true,
+      "incluirEscala": true
+    }
+  },
+
+  "escenario_3_error_integridad": {
+    "_descripcion": "Escenario Error - Incoherencia Vértices vs Linderos",
+    "_esperado": "API debe retornar Error 400 con mensaje claro, NO debe colgarse",
+    
+    "meta": {
+      "solicitudId": "TEST-ERROR-003",
+      "fechaSolicitud": "2026-01-31T08:00:00Z",
+      "solicitante": "QA Tester"
+    },
+
+    "loteObjetivo": {
+      "type": "Feature",
+      "properties": {
+        "identificador": {
+          "manzana": "C",
+          "lote": "99",
+          "urbanizacion": "Error Test Zone"
+        },
+        "comercial": {
+          "nombreComercial": "Lote de Prueba de Error"
+        },
+        "ubicacion": {
+          "direccion": "Test Error 123",
+          "distrito": "Test",
+          "provincia": "Test",
+          "departamento": "Test"
+        },
+        "titularidad": {
+          "nombre": "Test Usuario",
+          "documento": {
+            "tipo": "DNI",
+            "numero": "99999999"
+          }
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [276700.00, 8664400.00],
+            [276710.00, 8664400.00],
+            [276710.00, 8664410.00],
+            [276700.00, 8664410.00],
+            [276700.00, 8664400.00]
+          ]
+        ]
+      }
+    },
+
+    "datosRegistrales": {
+      "areaOficial": 100.00,
+      "perimetroOficial": 40.00,
+      "linderos": [
+        {
+          "index": 0,
+          "tramo": "V1 - V2",
+          "longitudTexto": "10.00",
+          "colindanciaTexto": "Calle 1",
+          "orientacion": "FRENTE"
+        },
+        {
+          "index": 1,
+          "tramo": "V2 - V3",
+          "longitudTexto": "10.00",
+          "colindanciaTexto": "Lote X",
+          "orientacion": "DERECHA"
+        },
+        {
+          "index": 2,
+          "tramo": "V3 - V4",
+          "longitudTexto": "10.00",
+          "colindanciaTexto": "Lote Y",
+          "orientacion": "FONDO"
+        },
+        {
+          "index": 3,
+          "tramo": "V4 - V5",
+          "longitudTexto": "10.00",
+          "colindanciaTexto": "Lote Z",
+          "orientacion": "IZQUIERDA"
+        },
+        {
+          "index": 4,
+          "tramo": "V5 - V1",
+          "longitudTexto": "10.00",
+          "colindanciaTexto": "ERROR: Este lindero no debería existir",
+          "orientacion": "ESQUINA"
+        }
+      ]
+    },
+
+    "contexto": {
+      "type": "FeatureCollection",
+      "features": []
+    },
+
+    "configImpresion": {
+      "formatoPapel": "a3",
+      "orientacion": "landscape"
+    }
+  }
+}

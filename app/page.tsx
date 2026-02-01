@@ -120,11 +120,11 @@ const INITIAL_DATA: LoteData = {
   loteId: "MZ-C-Lote14",
   propietario: "Inversiones Santa Rosa S.A.C.",
   dimensiones: {
-    frente: 10.00,
-    fondo: 10.00,
-    izquierda: 20.00,
-    derecha: 20.00,
-    area: 200.00
+    frente: 0,
+    fondo: 0,
+    izquierda: 0,
+    derecha: 0,
+    area: 0
   },
   colindantes: {
     frente: "Av. Los Alamos",
@@ -360,6 +360,11 @@ export default function EditorPlanos() {
     setSelectedNeighbor(null);
   };
 
+
+
+
+
+
   // --- BÚSQUEDA OPENSTREETMAP (Nominatim) ---
   const handleSearchOSM = async () => {
     if (!searchQuery.trim()) return;
@@ -384,6 +389,13 @@ export default function EditorPlanos() {
     }
   };
 
+
+
+
+
+
+
+  
   // --- TRASLACIÓN GEOMÉTRICA ---
   const handleLocationSelect = (lat: number, lng: number) => {
     try {
@@ -701,128 +713,204 @@ export default function EditorPlanos() {
       return;
     }
 
-    if (!apiKey) {
-      toast.error('No se encontró la API key. Por favor, inicia sesión nuevamente.');
-      return;
-    }
-
     setLoading(true);
     
     try {
-      // Calcular perímetro
-      let perimeter = 0;
-      for (let i = 0; i < data.vertices.length; i++) {
-        const current = data.vertices[i];
-        const next = data.vertices[(i + 1) % data.vertices.length];
-        const dist = Math.sqrt(
-          Math.pow(next.x - current.x, 2) + Math.pow(next.y - current.y, 2)
-        );
-        perimeter += dist;
-      }
+      // Extraer parte numérica del loteId
+      const loteMatch = data.loteId.match(/\d+/);
+      const manzanaMatch = data.loteId.match(/MZ-([A-Z])/i);
+      
+      // Construir payload en formato híbrido (PlanoPayloadHibrido)
+      const hybridPayload = {
+        // Metadatos
+        meta: {
+          solicitudId: `WEB-${Date.now()}`,
+          fechaSolicitud: new Date().toISOString(),
+          solicitante: data.propietario || "Usuario Web"
+        },
 
-      // Transformar datos al formato esperado por la API
-      const requestData = {
-        vertices: data.vertices.map(v => [v.x, v.y] as [number, number]),
-        dimensiones: {
-          frente: data.dimensiones.frente || 0,
-          fondo: data.dimensiones.fondo || 0,
-          ladoDerecho: data.dimensiones.derecha || 0,
-          ladoIzquierdo: data.dimensiones.izquierda || 0,
-          area: data.dimensiones.area || 0,
-          perimetro: Number(perimeter.toFixed(2))
+        // Lote objetivo (GeoJSON Feature)
+        loteObjetivo: {
+          type: "Feature" as const,
+          properties: {
+            identificador: {
+              manzana: manzanaMatch ? manzanaMatch[1] : "A",
+              lote: loteMatch ? loteMatch[0] : "01",
+              urbanizacion: data.membrete.proyecto || "Urbanización"
+            },
+            comercial: {
+              nombreComercial: `Lote ${loteMatch ? loteMatch[0] : data.loteId}`
+            },
+            ubicacion: {
+              direccion: data.colindantes.frente || "Sin dirección",
+              distrito: "Lima",
+              provincia: "Lima",
+              departamento: "Lima"
+            },
+            titularidad: {
+              nombre: data.propietario || "Sin especificar",
+              documento: {
+                tipo: "DNI" as const,
+                numero: "00000000"
+              }
+            }
+          },
+          geometry: {
+            type: "Polygon" as const,
+            coordinates: [[
+              ...data.vertices.map(v => [v.x, v.y] as [number, number]),
+              [data.vertices[0].x, data.vertices[0].y] // Cerrar polígono
+            ]]
+          }
         },
-        lote: {
-          codigo: data.loteId,
-          nombre: data.loteId,
-          manzana: data.loteId.split('-')[0] || 'MZ-A',
-          etapa: 'Etapa 1',
-          numeroLote: data.loteId.split('-')[2] || '01',
-          estado: 'libre' as const
+
+        // Datos registrales (construir desde formulario)
+        datosRegistrales: {
+          areaOficial: data.dimensiones.area, // Usar área del formulario
+          perimetroOficial: null, // Calcular desde linderos
+          // Generar linderos dinámicamente basado en vértices
+          linderos: data.vertices.map((v, i) => {
+            const nextIndex = (i + 1) % data.vertices.length;
+            
+            // Mapear el índice a lado específico para polígonos de 4 lados
+            let longitudTexto = "0.00";
+            let colindanciaTexto = "Sin especificar";
+            let orientacion: "FRENTE" | "DERECHA" | "FONDO" | "IZQUIERDA" = "FRENTE";
+            
+            if (data.vertices.length === 4) {
+              // Para polígonos rectangulares (4 lados)
+              const mapping = [
+                { dist: data.dimensiones.frente, col: data.colindantes.frente, ori: "FRENTE" as const },
+                { dist: data.dimensiones.derecha, col: data.colindantes.derecha, ori: "DERECHA" as const },
+                { dist: data.dimensiones.fondo, col: data.colindantes.fondo, ori: "FONDO" as const },
+                { dist: data.dimensiones.izquierda, col: data.colindantes.izquierda, ori: "IZQUIERDA" as const }
+              ];
+              
+              if (mapping[i]) {
+                longitudTexto = mapping[i].dist.toFixed(2);
+                colindanciaTexto = mapping[i].col || "Sin especificar";
+                orientacion = mapping[i].ori;
+              }
+            } else {
+              // Para otros polígonos, calcular distancia real
+              const v1 = data.vertices[i];
+              const v2 = data.vertices[nextIndex];
+              const dist = Math.sqrt(Math.pow(v2.x - v1.x, 2) + Math.pow(v2.y - v1.y, 2));
+              longitudTexto = dist.toFixed(2);
+              colindanciaTexto = `Lado ${i + 1}`;
+              orientacion = "FRENTE";
+            }
+            
+            return {
+              index: i,
+              tramo: `V${i + 1} - V${nextIndex + 1}`,
+              longitudTexto,
+              colindanciaTexto,
+              orientacion
+            };
+          })
         },
-        colindancias: [
-          { lado: 'frente' as const, tipo: 'calle' as const, nombre: data.colindantes.frente || 'No especificado' },
-          { lado: 'fondo' as const, tipo: 'lote' as const, nombre: data.colindantes.fondo || 'No especificado' },
-          { lado: 'izquierda' as const, tipo: 'lote' as const, nombre: data.colindantes.izquierda || 'No especificado' },
-          { lado: 'derecha' as const, tipo: 'lote' as const, nombre: data.colindantes.derecha || 'No especificado' }
-        ],
-        propietario: {
-          nombre: data.propietario || 'Sin propietario'
-        },
-        config: {
-          incluirMemoriaDescriptiva: true,
-          incluirPlanoPerimetrico: true,
-          incluirPlanoUbicacion: true,
-          formatoPapel: 'A4' as const,
-          orientacion: 'portrait' as const,
-          escala: data.membrete.escala,
-          incluirColindantesEnPlano: true
-        },
-        contexto: data.contexto.vecinos && data.contexto.vecinos.length > 0 ? {
-          lotesVecinos: data.contexto.vecinos.map(v => ({
-            codigo: v.codigo || v.nombre,
-            vertices: v.vertices.map(vt => [vt.x, vt.y] as [number, number]),
-            estado: v.estado || 'libre',
-            texto: v.nombre.replace(/[^0-9]/g, '') || v.id // Extraer número para etiqueta
+
+        // Contexto geoespacial (lotes vecinos)
+        contexto: {
+          type: "FeatureCollection" as const,
+          features: data.contexto.vecinos.map(vecino => ({
+            type: "Feature" as const,
+            properties: {
+              tipo: "lote" as const,
+              numeroLote: vecino.nombre.match(/\d+/)?.[0] || vecino.id,
+              estado: vecino.estado || "libre"
+            },
+            geometry: {
+              type: "Polygon" as const,
+              coordinates: [[
+                ...vecino.vertices.map(v => [v.x, v.y] as [number, number]),
+                [vecino.vertices[0].x, vecino.vertices[0].y] // Cerrar polígono
+              ]]
+            }
           }))
-        } : undefined
-      };
-
-      const response = await fetch('/api/v1/planos/generar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey
         },
-        body: JSON.stringify(requestData)
-      });
 
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        // Caso 1: PDF generado inmediatamente (tiene URL)
-        if (result.data.pdfUrl) {
-          toast.success('¡PDF generado exitosamente!');
-          
-          // Descargar el PDF
-          const link = document.createElement('a');
-          link.href = result.data.pdfUrl;
-          link.download = `plano_${data.loteId}_${Date.now()}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          toast.success('PDF descargado correctamente');
-        }
-        // Caso 2: Job en cola (asíncrono)
-        else if (result.data.status === 'pending' || result.data.status === 'processing') {
-          toast.success('¡Plano enviado a generación!');
-          toast.loading('El PDF se está generando en segundo plano...', { duration: 3000 });
-          
-          setTimeout(() => {
-            toast.success('Puedes ver tu plano en el Dashboard cuando esté listo', { duration: 5000 });
-          }, 3000);
-          
-          // Opcional: redirigir al dashboard después de 4 segundos
-          setTimeout(() => {
-            router.push('/dashboard');
-          }, 6000);
-        }
-        // Caso 3: Job completado
-        else if (result.data.status === 'completed') {
-          toast.success('¡Plano generado exitosamente!');
-          if (result.data.pdfUrl) {
-            window.open(result.data.pdfUrl, '_blank');
+        // Configuración de impresión
+        configImpresion: {
+          formatoPapel: "a3" as const,
+          orientacion: "landscape" as const,
+          incluirNorte: true,
+          incluirEscala: true,
+          estilos: {
+            colorLotePrincipal: "#000000",
+            colorVecinos: "#CCCCCC"
           }
         }
-        // Caso 4: Job falló
-        else if (result.data.status === 'failed') {
-          toast.error('Error al generar el PDF. Por favor intenta nuevamente.');
+      };
+
+      console.log('📤 Enviando payload híbrido:', hybridPayload);
+
+      // Enviar al nuevo endpoint híbrido
+      const response = await fetch('/api/v1/planos/generar-hibrido', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(hybridPayload)
+      });
+
+      // Verificar si la respuesta es exitosa
+      if (!response.ok) {
+        // Si es 400, leer el JSON de error
+        if (response.status === 400) {
+          const errorData = await response.json();
+          toast.error(errorData.error?.message || 'Error de validación');
+          console.error('Error 400:', errorData);
+          return;
         }
-      } else {
-        toast.error(result.error?.message || 'Error al generar el PDF');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
+
+      // Leer headers informativos
+      const dataSourceArea = response.headers.get('X-Data-Source-Area');
+      const dataSourceLinderos = response.headers.get('X-Data-Source-Linderos');
+      const requiresReview = response.headers.get('X-Requires-Review');
+      const genTime = response.headers.get('X-Generation-Time');
+
+      console.log('📊 Metadata de generación:', {
+        dataSourceArea,
+        dataSourceLinderos,
+        requiresReview,
+        genTime: genTime ? `${genTime}ms` : 'N/A'
+      });
+
+      // Respuesta es PDF binario
+      const pdfBlob = await response.blob();
+      
+      // Crear URL temporal y descargar
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `plano_${data.loteId}_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      // Mensajes de éxito con información adicional
+      toast.success('¡PDF generado exitosamente!');
+      
+      if (dataSourceArea === 'CALCULADO') {
+        toast.success('📐 Área calculada automáticamente desde geometría', { duration: 3000 });
+      }
+      
+      if (requiresReview === 'true') {
+        toast('⚠️ El plano requiere revisión manual (ver headers)', {
+          icon: '⚠️',
+          duration: 5000
+        });
+      }
+
+      toast.success(`⏱️ Generado en ${genTime || '?'}ms`, { duration: 2000 });
+
     } catch (error) {
-      console.error('Error al generar PDF:', error);
+      console.error('❌ Error al generar PDF:', error);
       toast.error('Error al conectar con el servidor');
     } finally {
       setLoading(false);
@@ -898,29 +986,6 @@ export default function EditorPlanos() {
                 {/* 1. GENERAL */}
                 {activeTab === 'general' && (
                   <div className="space-y-6 animate-fadeIn">
-
-                    {/* === BUSCADOR DE UBICACIÓN OSM === */}
-                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
-                      <label className="block text-xs font-bold text-blue-800 uppercase tracking-wide">
-                        📍 Ubicar en el Mapa (OpenStreetMap)
-                      </label>
-                      <div className="flex gap-2">
-                         <input 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearchOSM()}
-                            placeholder="Ej: Av. Arequipa, Lima" 
-                            className="flex-1 text-sm p-2 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                         />
-                         <button onClick={handleSearchOSM} disabled={isSearching} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 flex items-center justify-center min-w-[40px]">
-                            {isSearching ? <Loader2 className="animate-spin" size={16}/> : <Search size={16}/>}
-                         </button>
-                      </div>
-                      <p className="text-[10px] text-blue-600 mb-2">
-                        Búsqueda gratuita gracias a Nominatim / OSM.
-                      </p>
-                    </div>
-                    {/* =================================== */}
 
                     <div className="space-y-4">
                       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Identificación</h3>
@@ -1000,7 +1065,40 @@ export default function EditorPlanos() {
                       </div>
                     </div>
 
-                    {/* LISTA DE VECINOS */}
+                    {/* === MODO SATELITAL: BUSCADOR OSM === */}
+                    {data.config.modoUbicacion === 'satelital' && (
+                      <div className="space-y-3">
+                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
+                          <label className="block text-xs font-bold text-blue-800 uppercase tracking-wide">
+                            📍 Buscador de Ubicación OSM
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleSearchOSM()}
+                              placeholder="Ej: Av. Arequipa, Lima"
+                              className="flex-1 text-sm p-2 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                              onClick={handleSearchOSM}
+                              disabled={isSearching}
+                              className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 flex items-center justify-center min-w-[40px] disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isSearching ? <Loader2 className="animate-spin" size={16}/> : <Search size={16}/>}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-blue-600">
+                            Búsqueda gratuita powered by Nominatim / OpenStreetMap.
+                          </p>
+                          <div className="text-xs text-slate-600 bg-white p-2 rounded border border-blue-100">
+                            💡 El buscador trasladará tu lote y vecinos a la ubicación encontrada.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* === MODO VECTORIAL: LISTA DE VECINOS === */}
                     {data.config.modoUbicacion === 'vectorial' && (
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">

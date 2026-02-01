@@ -1,0 +1,201 @@
+{
+  "info": {
+    "name": "Planos Híbridos V2 - QA Tests",
+    "description": "Colección de pruebas para el sistema de generación híbrida de planos perimétricos",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "hibrido-qa-tests-v2",
+    "version": "2.0.0"
+  },
+  "item": [
+    {
+      "name": "Escenario 1: Happy Path (Registral)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Content-Type is PDF', function () {",
+              "    pm.response.to.have.header('Content-Type', 'application/pdf');",
+              "});",
+              "",
+              "pm.test('Data source is REGISTRAL', function () {",
+              "    pm.response.to.have.header('X-Data-Source-Area', 'REGISTRAL');",
+              "    pm.response.to.have.header('X-Data-Source-Perimeter', 'REGISTRAL');",
+              "    pm.response.to.have.header('X-Data-Source-Linderos', 'REGISTRAL');",
+              "});",
+              "",
+              "pm.test('Does not require review', function () {",
+              "    pm.response.to.have.header('X-Requires-Review', 'false');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"meta\": {\n    \"solicitudId\": \"TEST-REGISTRAL-001\",\n    \"fechaSolicitud\": \"2026-01-31T08:00:00Z\",\n    \"solicitante\": \"QA Tester\"\n  },\n  \"loteObjetivo\": {\n    \"type\": \"Feature\",\n    \"properties\": {\n      \"identificador\": {\n        \"manzana\": \"A\",\n        \"lote\": \"5\",\n        \"urbanizacion\": \"Los Jardines del Valle\"\n      },\n      \"comercial\": {\n        \"nombreComercial\": \"Lote 5 - Residencial\"\n      },\n      \"ubicacion\": {\n        \"direccion\": \"Av. Los Alamos 456\",\n        \"distrito\": \"San Isidro\",\n        \"provincia\": \"Lima\",\n        \"departamento\": \"Lima\"\n      },\n      \"titularidad\": {\n        \"nombre\": \"Juan Pérez García\",\n        \"documento\": {\n          \"tipo\": \"DNI\",\n          \"numero\": \"12345678\"\n        }\n      }\n    },\n    \"geometry\": {\n      \"type\": \"Polygon\",\n      \"coordinates\": [\n        [\n          [276500.50, 8664200.75],\n          [276510.48, 8664200.75],\n          [276510.48, 8664220.73],\n          [276500.50, 8664220.73],\n          [276500.50, 8664200.75]\n        ]\n      ]\n    }\n  },\n  \"datosRegistrales\": {\n    \"areaOficial\": 199.60,\n    \"perimetroOficial\": 59.96,\n    \"linderos\": [\n      {\n        \"index\": 0,\n        \"tramo\": \"V1 - V2\",\n        \"longitudTexto\": \"10.00\",\n        \"colindanciaTexto\": \"Av. Los Alamos\",\n        \"orientacion\": \"FRENTE\"\n      },\n      {\n        \"index\": 1,\n        \"tramo\": \"V2 - V3\",\n        \"longitudTexto\": \"19.98\",\n        \"colindanciaTexto\": \"Lote 6\",\n        \"orientacion\": \"DERECHA\"\n      },\n      {\n        \"index\": 2,\n        \"tramo\": \"V3 - V4\",\n        \"longitudTexto\": \"9.98\",\n        \"colindanciaTexto\": \"Lote 4\",\n        \"orientacion\": \"FONDO\"\n      },\n      {\n        \"index\": 3,\n        \"tramo\": \"V4 - V1\",\n        \"longitudTexto\": \"20.00\",\n        \"colindanciaTexto\": \"Pasaje Comercio\",\n        \"orientacion\": \"IZQUIERDA\"\n      }\n    ]\n  },\n  \"contexto\": {\n    \"type\": \"FeatureCollection\",\n    \"features\": [\n      {\n        \"type\": \"Feature\",\n        \"properties\": {\n          \"tipo\": \"calle\",\n          \"nombre\": \"Av. Los Alamos\"\n        },\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [\n            [\n              [276490.00, 8664195.00],\n              [276520.00, 8664195.00],\n              [276520.00, 8664200.75],\n              [276490.00, 8664200.75],\n              [276490.00, 8664195.00]\n            ]\n          ]\n        }\n      },\n      {\n        \"type\": \"Feature\",\n        \"properties\": {\n          \"tipo\": \"lote\",\n          \"numeroLote\": \"6\"\n        },\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [\n            [\n              [276510.48, 8664200.75],\n              [276520.00, 8664200.75],\n              [276520.00, 8664220.73],\n              [276510.48, 8664220.73],\n              [276510.48, 8664200.75]\n            ]\n          ]\n        }\n      }\n    ]\n  },\n  \"configImpresion\": {\n    \"formatoPapel\": \"a3\",\n    \"orientacion\": \"landscape\",\n    \"incluirNorte\": true,\n    \"incluirEscala\": true,\n    \"estilos\": {\n      \"colorLotePrincipal\": \"#000000\",\n      \"colorVecinos\": \"#CCCCCC\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/v1/planos/generar-hibrido",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "v1", "planos", "generar-hibrido"]
+        },
+        "description": "**Escenario Happy Path**: Prueba con datos registrales completos.\n\n**Esperado**:\n- Status 200\n- PDF válido\n- Muestra \"10.00m\" en lado FRENTE (texto registral)\n- Headers indican fuente REGISTRAL\n\n**Verificar en PDF**:\n1. Cota del frente muestra \"10.00m\"\n2. Cuadro técnico tiene columna COLINDANCIA\n3. Área = 199.60 m²\n4. Perímetro = 59.96 ml"
+      },
+      "response": []
+    },
+    {
+      "name": "Escenario 2: Fallback Geométrico",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Content-Type is PDF', function () {",
+              "    pm.response.to.have.header('Content-Type', 'application/pdf');",
+              "});",
+              "",
+              "pm.test('Data source is CALCULADO', function () {",
+              "    pm.response.to.have.header('X-Data-Source-Area', 'CALCULADO');",
+              "    pm.response.to.have.header('X-Data-Source-Perimeter', 'CALCULADO');",
+              "    pm.response.to.have.header('X-Data-Source-Linderos', 'CALCULADO');",
+              "});",
+              "",
+              "pm.test('Generation time is reasonable', function () {",
+              "    const genTime = parseInt(pm.response.headers.get('X-Generation-Time'));",
+              "    pm.expect(genTime).to.be.below(5000); // < 5 segundos",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"meta\": {\n    \"solicitudId\": \"TEST-FALLBACK-002\",\n    \"fechaSolicitud\": \"2026-01-31T08:00:00Z\",\n    \"solicitante\": \"QA Tester\"\n  },\n  \"loteObjetivo\": {\n    \"type\": \"Feature\",\n    \"properties\": {\n      \"identificador\": {\n        \"manzana\": \"B\",\n        \"lote\": \"12\",\n        \"urbanizacion\": \"Villa Hermosa\"\n      },\n      \"comercial\": {\n        \"nombreComercial\": \"Lote 12 - Comercial\"\n      },\n      \"ubicacion\": {\n        \"direccion\": \"Av. Los Alamos 789\",\n        \"distrito\": \"San Isidro\",\n        \"provincia\": \"Lima\",\n        \"departamento\": \"Lima\"\n      },\n      \"titularidad\": {\n        \"nombre\": \"María González López\",\n        \"documento\": {\n          \"tipo\": \"DNI\",\n          \"numero\": \"87654321\"\n        }\n      }\n    },\n    \"geometry\": {\n      \"type\": \"Polygon\",\n      \"coordinates\": [\n        [\n          [276600.00, 8664300.00],\n          [276615.00, 8664300.00],\n          [276615.00, 8664320.00],\n          [276600.00, 8664320.00],\n          [276600.00, 8664300.00]\n        ]\n      ]\n    }\n  },\n  \"datosRegistrales\": {\n    \"areaOficial\": null,\n    \"perimetroOficial\": null,\n    \"linderos\": null\n  },\n  \"contexto\": {\n    \"type\": \"FeatureCollection\",\n    \"features\": [\n      {\n        \"type\": \"Feature\",\n        \"properties\": {\n          \"tipo\": \"calle\",\n          \"nombre\": \"Av. Los Alamos\"\n        },\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [\n            [\n              [276590.00, 8664295.00],\n              [276625.00, 8664295.00],\n              [276625.00, 8664300.00],\n              [276590.00, 8664300.00],\n              [276590.00, 8664295.00]\n            ]\n          ]\n        }\n      },\n      {\n        \"type\": \"Feature\",\n        \"properties\": {\n          \"tipo\": \"lote\",\n          \"numeroLote\": \"13\"\n        },\n        \"geometry\": {\n          \"type\": \"Polygon\",\n          \"coordinates\": [\n            [\n              [276615.00, 8664300.00],\n              [276630.00, 8664300.00],\n              [276630.00, 8664320.00],\n              [276615.00, 8664320.00],\n              [276615.00, 8664300.00]\n            ]\n          ]\n        }\n      }\n    ]\n  },\n  \"configImpresion\": {\n    \"formatoPapel\": \"a3\",\n    \"orientacion\": \"landscape\",\n    \"incluirNorte\": true,\n    \"incluirEscala\": true\n  }\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/v1/planos/generar-hibrido",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "v1", "planos", "generar-hibrido"]
+        },
+        "description": "**Escenario Fallback**: Prueba SIN datos registrales (cálculo automático).\n\n**Esperado**:\n- Status 200\n- PDF válido con datos calculados\n- Detección automática de colindancia \"Av. Los Alamos\"\n- Headers indican fuente CALCULADO\n\n**Verificar en PDF**:\n1. Cotas calculadas desde geometría (~15m x ~20m)\n2. Área calculada ~300 m² (15m × 20m)\n3. Colindancia detectada automáticamente\n4. Cuadro técnico completo"
+      },
+      "response": []
+    },
+    {
+      "name": "Escenario 3: Error de Integridad",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 400 (Bad Request)', function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test('Content-Type is JSON', function () {",
+              "    pm.response.to.have.header('Content-Type');",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+              "});",
+              "",
+              "pm.test('Response has error structure', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('success', false);",
+              "    pm.expect(jsonData).to.have.property('error');",
+              "    pm.expect(jsonData.error).to.have.property('code');",
+              "    pm.expect(jsonData.error).to.have.property('message');",
+              "});",
+              "",
+              "pm.test('Error message mentions linderos mismatch', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const errorDetails = JSON.stringify(jsonData.error);",
+              "    pm.expect(errorDetails.toLowerCase()).to.include('linderos');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"meta\": {\n    \"solicitudId\": \"TEST-ERROR-003\",\n    \"fechaSolicitud\": \"2026-01-31T08:00:00Z\",\n    \"solicitante\": \"QA Tester\"\n  },\n  \"loteObjetivo\": {\n    \"type\": \"Feature\",\n    \"properties\": {\n      \"identificador\": {\n        \"manzana\": \"C\",\n        \"lote\": \"99\",\n        \"urbanizacion\": \"Error Test Zone\"\n      },\n      \"comercial\": {\n        \"nombreComercial\": \"Lote de Prueba de Error\"\n      },\n      \"ubicacion\": {\n        \"direccion\": \"Test Error 123\",\n        \"distrito\": \"Test\",\n        \"provincia\": \"Test\",\n        \"departamento\": \"Test\"\n      },\n      \"titularidad\": {\n        \"nombre\": \"Test Usuario\",\n        \"documento\": {\n          \"tipo\": \"DNI\",\n          \"numero\": \"99999999\"\n        }\n      }\n    },\n    \"geometry\": {\n      \"type\": \"Polygon\",\n      \"coordinates\": [\n        [\n          [276700.00, 8664400.00],\n          [276710.00, 8664400.00],\n          [276710.00, 8664410.00],\n          [276700.00, 8664410.00],\n          [276700.00, 8664400.00]\n        ]\n      ]\n    }\n  },\n  \"datosRegistrales\": {\n    \"areaOficial\": 100.00,\n    \"perimetroOficial\": 40.00,\n    \"linderos\": [\n      {\n        \"index\": 0,\n        \"tramo\": \"V1 - V2\",\n        \"longitudTexto\": \"10.00\",\n        \"colindanciaTexto\": \"Calle 1\",\n        \"orientacion\": \"FRENTE\"\n      },\n      {\n        \"index\": 1,\n        \"tramo\": \"V2 - V3\",\n        \"longitudTexto\": \"10.00\",\n        \"colindanciaTexto\": \"Lote X\",\n        \"orientacion\": \"DERECHA\"\n      },\n      {\n        \"index\": 2,\n        \"tramo\": \"V3 - V4\",\n        \"longitudTexto\": \"10.00\",\n        \"colindanciaTexto\": \"Lote Y\",\n        \"orientacion\": \"FONDO\"\n      },\n      {\n        \"index\": 3,\n        \"tramo\": \"V4 - V5\",\n        \"longitudTexto\": \"10.00\",\n        \"colindanciaTexto\": \"Lote Z\",\n        \"orientacion\": \"IZQUIERDA\"\n      },\n      {\n        \"index\": 4,\n        \"tramo\": \"V5 - V1\",\n        \"longitudTexto\": \"10.00\",\n        \"colindanciaTexto\": \"ERROR: Este lindero no debería existir\",\n        \"orientacion\": \"ESQUINA\"\n      }\n    ]\n  },\n  \"contexto\": {\n    \"type\": \"FeatureCollection\",\n    \"features\": []\n  },\n  \"configImpresion\": {\n    \"formatoPapel\": \"a3\",\n    \"orientacion\": \"landscape\"\n  }\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/v1/planos/generar-hibrido",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "v1", "planos", "generar-hibrido"]
+        },
+        "description": "**Escenario Error**: Prueba con incoherencia (4 lados vs 5 linderos).\n\n**Esperado**:\n- Status 400 (Bad Request)\n- Response es JSON (NO PDF)\n- Estructura de error correcta\n- Servidor NO se cuelga\n\n**Verificar**:\n1. Status Code = 400 (no 500, no 200)\n2. JSON contiene `success: false`\n3. JSON contiene mensaje descriptivo\n4. Servidor sigue respondiendo a nuevas requests"
+      },
+      "response": []
+    },
+    {
+      "name": "GET - Info de la API",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/api/v1/planos/generar-hibrido",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "v1", "planos", "generar-hibrido"]
+        },
+        "description": "Endpoint informativo que retorna la documentación de la API híbrida.\n\n**Retorna**:\n- Descripción del servicio\n- Versión actual\n- Características principales\n- Filosofía del sistema\n- Ejemplo de uso"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "apiPath",
+      "value": "/api/v1/planos/generar-hibrido",
+      "type": "string"
+    }
+  ]
+}

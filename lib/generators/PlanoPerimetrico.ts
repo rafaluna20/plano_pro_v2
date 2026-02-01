@@ -3,32 +3,44 @@ import { GenerarPlanosRequest, PlanoConfig, UTMCoordinate } from '@/types/planos
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
 import { utmToPaper, utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { calculateDistance, getBoundingBox, calculateCentroid } from '@/lib/geometry/utmUtils';
+import { PLANO_THEME, getGridInterval } from '@/lib/config/PlanoTheme';
 
 /**
- * Generador de Plano Perimétrico Profesional (Versión Final Estándar Registral)
- * Correcciones Finales:
- * - Etiqueta Central: Muestra "A=..." y "P=..." explícitamente.
- * - Croquis Ubicación: Factor de seguridad aumentado (0.85) para evitar desbordes.
- * - Clipping: Se mantiene para garantizar limpieza visual.
+ * Generador de Plano Perimétrico Profesional (Versión Refactorizada)
+ *
+ * CHANGELOG:
+ * - Estilos desacoplados: Todos los valores visuales provienen de PlanoTheme.ts
+ * - Sin magic numbers: Layout y dimensiones configurables centralmente
+ * - Texto adaptativo: Implementa drawTextAutoFit para nombres largos
+ * - Mantenimiento mejorado: Cambios de diseño sin tocar lógica
+ *
+ * FUNCIONALIDADES PRESERVADAS:
+ * - Etiqueta Central: Muestra "A=..." y "P=..." explícitamente
+ * - Croquis Ubicación: Factor de seguridad (0.85) para evitar desbordes
+ * - Clipping: Garantiza limpieza visual
+ * - Grilla UTM: Coordenadas reales con intervalos dinámicos
+ * - Contexto vectorial e imágenes satelitales
  */
 export class PlanoPerimetricoGenerator {
   private request: GenerarPlanosRequest;
-
-  // Constantes de estilo CAD para consistencia profesional
-  private readonly STYLE = {
-    LINE_THICK: 0.6,    // Límite de propiedad (0.6mm)
-    LINE_MEDIUM: 0.3,   // Marcos y textos principales (0.3mm)
-    LINE_THIN: 0.1,     // Grillas, cotas y líneas auxiliares (0.1mm)
-    COLOR_BLACK: '#000000',
-    COLOR_GRAY: '#505050',
-    COLOR_LIGHT_GRAY: '#E0E0E0'
-  };
 
   constructor(
     request: GenerarPlanosRequest,
     private config: PlanoConfig
   ) {
     this.request = request;
+  }
+
+  /**
+   * Helper: Convierte color hexadecimal a componentes RGB
+   */
+  private hexToRgb(hex: string): { r: number; g: number; b: number } {
+    // Remover el # si está presente
+    const cleanHex = hex.replace('#', '');
+    const r = parseInt(cleanHex.substring(0, 2), 16);
+    const g = parseInt(cleanHex.substring(2, 4), 16);
+    const b = parseInt(cleanHex.substring(4, 6), 16);
+    return { r, g, b };
   }
 
   async generate(pdf: jsPDF): Promise<void> {
@@ -38,18 +50,19 @@ export class PlanoPerimetricoGenerator {
     const pageWidth = pdf.internal.pageSize.width;
     const pageHeight = pdf.internal.pageSize.height;
 
-    // ========== 1. DEFINICIÓN DE LAYOUT (Distrbución A4/A3) ==========
-    const rightColumnWidth = 100; // Ancho columna derecha (mm)
-    const margin = 10;
-    const gap = 5;
+    // ========== 1. DEFINICIÓN DE LAYOUT (Distribución desde PLANO_THEME) ==========
+    const { LAYOUT } = PLANO_THEME;
+    const rightColumnWidth = LAYOUT.COLUMNA_DERECHA_ANCHO;
+    const margin = LAYOUT.MARGENES.IZQUIERDO; // Asumimos márgenes simétricos
+    const gap = LAYOUT.GAP;
 
     // Coordenada X de la Columna Derecha
     const colX = pageWidth - rightColumnWidth - margin;
     
-    // Alturas de bloques derechos
-    const titleBarHeight = 12; // Barra negra superior
-    const ubicacionHeight = 85; // Cuadro de ubicación generoso
-    const membreteHeight = 55;  // Membrete compacto y técnico
+    // Alturas de bloques derechos (desde el tema)
+    const titleBarHeight = LAYOUT.ALTURAS.HEADER;
+    const ubicacionHeight = LAYOUT.ALTURAS.UBICACION;
+    const membreteHeight = LAYOUT.ALTURAS.MEMBRETE;
     
     // El cuadro técnico ocupa el espacio restante dinámicamente
     const cuadroTecnicoHeight = pageHeight - (margin * 2) - titleBarHeight - ubicacionHeight - membreteHeight - (gap * 3);
@@ -72,8 +85,13 @@ export class PlanoPerimetricoGenerator {
     this.drawProfessionalBorder(pdf, pageWidth, pageHeight);
 
     // ========== 3. CÁLCULO DE ESCALA Y GEOMETRÍA ==========
-    // Calculamos escala para que el lote entre en el área de dibujo con un margen de 20mm
-    const { escala, escalaTexto } = this.calculateScaleForViewport(vertices, drawingArea.width, drawingArea.height, 20);
+    // Calculamos escala para que el lote entre en el área de dibujo con margen del tema
+    const { escala, escalaTexto } = this.calculateScaleForViewport(
+      vertices,
+      drawingArea.width,
+      drawingArea.height,
+      LAYOUT.DIBUJO.MARGEN_INTERNO
+    );
     const centerX = drawingArea.x + drawingArea.width / 2;
     const centerY = drawingArea.y + drawingArea.height / 2;
 
@@ -99,9 +117,9 @@ export class PlanoPerimetricoGenerator {
     // B. Lote Principal (Polígono grueso destacado)
     const paperPoints = utmToPaper(vertices, escala, centerX, centerY);
     cad.drawPolygon(paperPoints, {
-      lineWidth: this.STYLE.LINE_THICK,
-      strokeColor: this.STYLE.COLOR_BLACK,
-      fillColor: vecinos?.length > 0 ? '#F5F5F5' : undefined // Relleno sutil si hay contexto vectorial
+      lineWidth: PLANO_THEME.STROKES.LOTE_BOUNDARY,
+      strokeColor: PLANO_THEME.COLORS.PRIMARY,
+      fillColor: vecinos?.length > 0 ? PLANO_THEME.COLORS.CONTEXT_FILL : undefined
     });
 
     // C. Etiqueta Central (Lote y Área) - CORREGIDO (Algoritmo Polo Inaccesibilidad + Texto Completo)
@@ -114,7 +132,12 @@ export class PlanoPerimetricoGenerator {
 
     // E. Título Principal y Norte en el mapa grande
     this.drawTitle(pdf, drawingArea, 'PLANO PERIMÉTRICO');
-    this.drawNorthCatastro(pdf, drawingArea.x + drawingArea.width - 25, drawingArea.y + 35, 20);
+    this.drawNorthCatastro(
+      pdf,
+      drawingArea.x + drawingArea.width - PLANO_THEME.NORTE.OFFSET_X,
+      drawingArea.y + PLANO_THEME.NORTE.OFFSET_Y,
+      PLANO_THEME.NORTE.SIZE
+    );
 
     // ========== 6. COLUMNA DERECHA (Información) ==========
     
@@ -135,7 +158,8 @@ export class PlanoPerimetricoGenerator {
   // MÉTODOS DE DIBUJO ESTRUCTURALES
   // ===========================================================================
 
-  /** * Dibuja la barra de título superior estilo CAD (Fondo negro, letras blancas)
+  /**
+   * Dibuja la barra de título superior estilo CAD (Fondo negro, letras blancas)
    */
   private drawHeaderTitleBar(pdf: jsPDF, area: any) {
     const { x, y, width, height } = area;
@@ -149,13 +173,13 @@ export class PlanoPerimetricoGenerator {
 
     // Título Principal
     pdf.setTextColor(255, 255, 255);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(11);
-    pdf.text('PLANO PERIMÉTRICO Y UBICACIÓN', x + (splitX - x)/2, y + height/2 + 1.5, { align: 'center' });
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.H2);
+    pdf.text('PLANO PERIMÉTRICO Y UBICACIÓN', x + (splitX - x)/2, y + height/2 + 4, { align: 'center' });
 
     // Línea separadora vertical blanca
     pdf.setDrawColor(255);
-    pdf.setLineWidth(0.5);
+    pdf.setLineWidth(PLANO_THEME.STROKES.SEPARATOR);
     pdf.line(splitX, y, splitX, y + height);
 
     // --- SECCIÓN DERECHA: CÓDIGO DE LÁMINA CON LÍNEAS VISUALES ---
@@ -167,38 +191,42 @@ export class PlanoPerimetricoGenerator {
 
     // Texto del código
     pdf.setTextColor(0); // Negro
-    pdf.setFontSize(6);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.text('LÁMINA Nº', splitX + 5, y + 5);
     
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.H3);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text('PP-01', splitX + codeAreaW/2 + 1, y + 9, {align: 'center'});
     
     // Línea decorativa debajo del PP-01 para dar énfasis
     pdf.setDrawColor(0);
-    pdf.setLineWidth(0.3);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     const lineW = 10;
     const lineX = splitX + codeAreaW/2 + 1 - lineW/2;
     pdf.line(lineX, y + 9.5, lineX + lineW, y + 9.5);
   }
 
-  /** * Plano de Ubicación Inteligente (CORREGIDO: ESCALADO AGRESIVO)
+  /**
+   * Plano de Ubicación Inteligente
    * Asegura que el lote y contexto encajen perfectamente en el cuadro.
-   * Usa factor de seguridad 0.85 y Clipping.
+   * Usa factor de seguridad del tema y Clipping.
    */
   private drawLocationPlan(pdf: jsPDF, area: any, vertices: UTMCoordinate[], vecinos: any[]) {
+    const { UBICACION } = PLANO_THEME;
+    
     // 1. Marco y Header
     pdf.setDrawColor(0);
-    pdf.setLineWidth(this.STYLE.LINE_MEDIUM);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     pdf.setFillColor(255, 255, 255);
     pdf.rect(area.x, area.y, area.width, area.height, 'FD');
 
-    const headerH = 5;
-    pdf.setFillColor(230, 230, 230);
+    const headerH = UBICACION.HEADER_HEIGHT;
+    const headerColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_HEADER);
+    pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
     pdf.rect(area.x, area.y, area.width, headerH, 'F');
     pdf.setTextColor(0);
-    pdf.setFontSize(7);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.LABEL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text('CROQUIS DE UBICACIÓN (S/E)', area.x + area.width/2, area.y + 3.5, { align: 'center' });
 
     // --- ZONA DE DIBUJO CON CLIPPING ---
@@ -225,9 +253,8 @@ export class PlanoPerimetricoGenerator {
     const bbox = getBoundingBox(allPoints);
     
     // 3. Cálculo de Escala Robusto
-    // Margen de seguridad aumentado (0.85 = 15% de margen libre)
-    // Esto previene que líneas gruesas toquen el borde
-    const marginFactor = 0.85; 
+    // Margen de seguridad del tema (previene que líneas gruesas toquen el borde)
+    const marginFactor = UBICACION.MARGIN_FACTOR;
     
     // Dimensiones del contenido real en metros
     // Protección contra dimensiones cero
@@ -261,8 +288,9 @@ export class PlanoPerimetricoGenerator {
     // 5. Dibujo
     // Vecinos
     if (vecinos) {
-      pdf.setDrawColor(150);
-      pdf.setLineWidth(0.1);
+      const grayVal = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
+      pdf.setDrawColor(grayVal);
+      pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
       vecinos.forEach(vecino => {
         if (!vecino.vertices || vecino.vertices.length < 3) return;
         const pts = vecino.vertices.map(transform);
@@ -276,7 +304,7 @@ export class PlanoPerimetricoGenerator {
     // Lote Principal
     const lotePts = vertices.map(transform);
     pdf.setDrawColor(0);
-    pdf.setLineWidth(0.3);
+    pdf.setLineWidth(UBICACION.LOTE_LINE_WIDTH);
     pdf.setFillColor(100, 100, 100);
     pdf.lines(
       lotePts.map((p, i) => i === 0 ? p : [p[0] - lotePts[i-1][0], p[1] - lotePts[i-1][1]]), 
@@ -287,59 +315,68 @@ export class PlanoPerimetricoGenerator {
     pdf.restoreGraphicsState();
 
     // Norte Magnético pequeño (fuera del clip, superpuesto)
-    this.drawNorthCatastro(pdf, area.x + area.width - 8, area.y + 15, 8);
+    this.drawNorthCatastro(pdf, area.x + area.width - 8, area.y + 15, UBICACION.NORTH_SIZE);
   }
+
+
+
+
+
+
+
+
+
+
+
 
   /**
    * Membrete Profesional Rediseñado
    */
   private drawProfessionalMembrete(pdf: jsPDF, area: any, lote: any, dimensiones: any, escala: string, prop: any) {
     const { x, y, width: w, height: h } = area;
+    const { MEMBRETE } = PLANO_THEME;
     
     pdf.setDrawColor(0);
-    pdf.setLineWidth(this.STYLE.LINE_MEDIUM);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     pdf.rect(x, y, w, h);
 
-    // Layout: 
-    // Izquierda (35%): Logo
-    // Derecha (65%): Campos de información
-    const colSplit = w * 0.35;
+    // Layout desde el tema
+    const colSplit = w * MEMBRETE.LOGO_COLUMN_PERCENT;
     pdf.line(x + colSplit, y, x + colSplit, y + h);
 
     // --- LOGO (Columna Izquierda) ---
     // Aquí puedes reemplazar con pdf.addImage() si tienes un logo real
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.H1);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text('LOGO', x + colSplit/2, y + h/2 - 2, { align: 'center' });
-    pdf.setFontSize(7);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.LABEL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     pdf.text('EMPRESA / ING.', x + colSplit/2, y + h/2 + 4, { align: 'center' });
     
     // --- CAMPOS DE DATOS (Columna Derecha) ---
-    const startX = x + colSplit + 3;
-    const lineHeight = h / 5; // Dividimos en 5 filas iguales
+    const startX = x + colSplit + MEMBRETE.PADDING_H;
+    const lineHeight = h / MEMBRETE.NUM_FILAS;
 
     // Función auxiliar para dibujar filas de datos con LÍNEAS VISIBLES
     const drawRow = (idx: number, label: string, val: string) => {
         const rowY = y + (idx * lineHeight);
         // Línea separadora (excepto la primera)
         if (idx > 0) {
-            pdf.setDrawColor(150); // Gris visible para las líneas internas
-            pdf.setLineWidth(0.1);
+            const grayVal = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
+            pdf.setDrawColor(grayVal);
+            pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
             pdf.line(x + colSplit, rowY, x + w, rowY);
         }
         
-        pdf.setTextColor(80); // Etiqueta gris oscuro
-        pdf.setFontSize(6);
-        pdf.setFont('helvetica', 'normal');
+        const dimmedVal = parseInt(PLANO_THEME.COLORS.DIMMED.slice(1, 3), 16);
+        pdf.setTextColor(dimmedVal);
+        pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+        pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
         pdf.text(label, startX, rowY + 3.5);
         
-        pdf.setTextColor(0); // Valor negro puro
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'bold');
-        // Truncar texto largo para que no se salga
-        const cleanVal = (val || '').length > 32 ? (val || '').substring(0,30) + '...' : (val || '');
-        pdf.text(cleanVal, startX, rowY + 8);
+        pdf.setTextColor(0);
+        // Usar drawTextAutoFit para valores largos
+        this.drawTextAutoFit(pdf, val || '---', startX, rowY + 8, w - colSplit - MEMBRETE.PADDING_H * 2, PLANO_THEME.FONTS.SIZES.BODY);
     };
 
     drawRow(0, 'PROYECTO:', lote.nombre || 'LEVANTAMIENTO TOPOGRÁFICO');
@@ -348,35 +385,59 @@ export class PlanoPerimetricoGenerator {
     
     // Fila 4: Dividida en Área y Perímetro
     const rowY4 = y + (3 * lineHeight);
-    pdf.setDrawColor(150);
+    const grayVal = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
+    pdf.setDrawColor(grayVal);
     pdf.line(x + colSplit, rowY4, x + w, rowY4);
     
     // Área (Con A=...)
-    pdf.setTextColor(80); pdf.setFontSize(6); pdf.setFont('helvetica', 'normal');
+    const dimmedVal = parseInt(PLANO_THEME.COLORS.DIMMED.slice(1, 3), 16);
+    pdf.setTextColor(dimmedVal);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     pdf.text('ÁREA:', startX, rowY4 + 3.5);
-    pdf.setTextColor(0); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(`${dimensiones.area.toFixed(2)} m²`, startX, rowY4 + 8);
 
     // Perímetro (a la derecha) (Con P=...)
     const midX = startX + 30;
-    pdf.setTextColor(80); pdf.setFontSize(6); pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(dimmedVal);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     pdf.text('PERÍMETRO:', midX, rowY4 + 3.5);
-    pdf.setTextColor(0); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(`${dimensiones.perimetro.toFixed(2)} ml`, midX, rowY4 + 8);
 
     // Fila 5: Escala y Fecha
     const rowY5 = y + (4 * lineHeight);
-    pdf.setDrawColor(150);
+    pdf.setDrawColor(grayVal);
     pdf.line(x + colSplit, rowY5, x + w, rowY5);
     
-    pdf.setTextColor(80); pdf.setFontSize(6); pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(dimmedVal);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     pdf.text('ESCALA:', startX, rowY5 + 3.5);
     pdf.text('FECHA:', midX, rowY5 + 3.5);
     
-    pdf.setTextColor(0); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(escala, startX, rowY5 + 8);
     pdf.text(new Date().toLocaleDateString(), midX, rowY5 + 8);
   }
+
+
+
+
+
+
+
+  
+
+
 
   /**
    * Cuadro Técnico de Coordenadas
@@ -384,42 +445,51 @@ export class PlanoPerimetricoGenerator {
   private drawTechnicalTable(pdf: jsPDF, area: any, vertices: UTMCoordinate[], datos: any) {
     const { angulos, distancias } = datos;
     const { x, y: startY, width: w } = area;
+    const { TABLA_TECNICA } = PLANO_THEME;
     let y = startY;
 
     // Header Tabla
-    pdf.setFillColor(0, 0, 0); // Negro
-    pdf.rect(x, y, w, 6, 'F');
+    pdf.setFillColor(0, 0, 0);
+    pdf.rect(x, y, w, TABLA_TECNICA.HEADER_HEIGHT, 'F');
     pdf.setTextColor(255);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text('CUADRO DE DATOS TÉCNICOS (WGS84)', x + w/2, y + 4, { align: 'center' });
-    y += 6;
+    y += TABLA_TECNICA.HEADER_HEIGHT;
 
     // Sub-header columnas
     const cols = ['VERT.', 'LADO', 'DIST.', 'ANG.', 'ESTE (X)', 'NORTE (Y)'];
-    // Distribución porcentual aproximada del ancho
-    const colW = [10, 15, 15, 15, 22.5, 22.5].map(p => (w * p) / 100);
+    // Distribución porcentual desde el tema
+    const { COLUMNAS } = TABLA_TECNICA;
+    const colW = [COLUMNAS.VERTICE, COLUMNAS.LADO, COLUMNAS.DISTANCIA, COLUMNAS.ANGULO, COLUMNAS.ESTE, COLUMNAS.NORTE]
+      .map(p => (w * p) / 100);
     
-    pdf.setFillColor(230, 230, 230); // Gris claro
+    const headerColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_HEADER);
+    pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
     pdf.setDrawColor(0);
-    pdf.rect(x, y, w, 5, 'FD');
+    pdf.rect(x, y, w, TABLA_TECNICA.SUBHEADER_HEIGHT, 'FD');
     pdf.setTextColor(0);
-    pdf.setFontSize(6);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
 
     let cx = x;
     cols.forEach((c, i) => {
         pdf.text(c, cx + colW[i]/2, y + 3.5, { align: 'center' });
         cx += colW[i];
     });
-    y += 5;
+    y += TABLA_TECNICA.SUBHEADER_HEIGHT;
 
     // Filas de datos
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     vertices.forEach((v, i) => {
         const next = (i + 1) % vertices.length;
         // Alternar color de filas para legibilidad (Zebra striping)
-        if (i % 2 === 0) pdf.setFillColor(255, 255, 255); else pdf.setFillColor(248, 248, 248);
-        pdf.rect(x, y, w, 4.5, 'FD');
+        if (i % 2 === 0) {
+          pdf.setFillColor(255, 255, 255);
+        } else {
+          const zebraColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_ZEBRA);
+          pdf.setFillColor(zebraColor.r, zebraColor.g, zebraColor.b);
+        }
+        pdf.rect(x, y, w, TABLA_TECNICA.ROW_HEIGHT, 'FD');
 
         cx = x;
         const cellY = y + 3;
@@ -436,7 +506,7 @@ export class PlanoPerimetricoGenerator {
         drawCell(v[0].toFixed(2), colW[4]);
         drawCell(v[1].toFixed(2), colW[5]);
 
-        y += 4.5;
+        y += TABLA_TECNICA.ROW_HEIGHT;
     });
   }
 
@@ -449,30 +519,33 @@ export class PlanoPerimetricoGenerator {
    * Utiliza el algoritmo "Polo de Inaccesibilidad" aproximado para encontrar el mejor punto.
    */
   private drawPolygonCentralData(pdf: jsPDF, pts: [number, number][], lote: any, dims: any) {
+    const { ETIQUETA_CENTRAL } = PLANO_THEME;
+    
     // 1. Encontrar el punto más "profundo" dentro del polígono
     const c = this.calculatePoleOfInaccessibility(pts);
     
     // Fondo blanco para que se lea sobre tramas o imágenes
     pdf.setFillColor(255, 255, 255);
     pdf.setDrawColor(0);
-    pdf.setLineWidth(0.1);
-    
-    const labelW = 28; // Un poco más ancho para que quepa "Perímetro..."
-    const labelH = 10; // Un poco más alto para 3 líneas de texto (Lote, Area, Perim)
+    pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
     
     // Dibujamos el cuadro centrado en nuestro punto calculado
-    pdf.rect(c.x - labelW/2, c.y - labelH/2, labelW, labelH, 'FD');
+    pdf.rect(c.x - ETIQUETA_CENTRAL.WIDTH/2, c.y - ETIQUETA_CENTRAL.HEIGHT/2,
+             ETIQUETA_CENTRAL.WIDTH, ETIQUETA_CENTRAL.HEIGHT, 'FD');
     
     // Línea 1: Lote
-    pdf.setFontSize(8); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(0);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setTextColor(0);
     pdf.text(`LOTE ${lote.numeroLote}`, c.x, c.y - 2, { align: 'center' });
     
     // Línea 2: Área (A=...)
-    pdf.setFontSize(6); pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     pdf.text(`A = ${dims.area.toFixed(2)} m²`, c.x, c.y + 1, { align: 'center' });
 
     // Línea 3: Perímetro (P=...)
-    pdf.text(`P = ${dims.perimetro.toFixed(2)} ml`, c.x, c.y + 3.5, { align: 'center' });
+    pdf.text(`P = ${dims.perimetro.toFixed(2)} ml`, c.x, c.y + ETIQUETA_CENTRAL.LINE_SPACING, { align: 'center' });
   }
 
   /**
@@ -585,7 +658,7 @@ export class PlanoPerimetricoGenerator {
 
   private drawRealUTMGrid(pdf: jsPDF, area: any, vertices: UTMCoordinate[], escala: number, cx: number, cy: number) {
     const centroUtm = calculateCentroid(vertices);
-    const interval = escala >= 2000 ? 100 : (escala >= 500 ? 50 : 20); // Intervalo dinámico
+    const interval = getGridInterval(escala); // Intervalo dinámico desde el tema
 
     const viewWMeters = (area.width / 1000) * escala;
     const viewHMeters = (area.height / 1000) * escala;
@@ -598,10 +671,11 @@ export class PlanoPerimetricoGenerator {
     const startX = Math.ceil(minUtmX / interval) * interval;
     const startY = Math.ceil(minUtmY / interval) * interval;
 
-    pdf.setLineWidth(this.STYLE.LINE_THIN); // Muy fina
-    pdf.setDrawColor(150); // Gris
-    pdf.setFontSize(6);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
+    const grayVal = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
+    pdf.setDrawColor(grayVal);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
 
     // Líneas Verticales
     for (let x = startX; x <= maxUtmX; x += interval) {
@@ -623,7 +697,7 @@ export class PlanoPerimetricoGenerator {
     
     // Marco exterior del área de dibujo
     pdf.setDrawColor(0);
-    pdf.setLineWidth(this.STYLE.LINE_MEDIUM);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     pdf.rect(area.x, area.y, area.width, area.height);
   }
 
@@ -637,16 +711,17 @@ export class PlanoPerimetricoGenerator {
         
         // Dibujamos el vecino
         cad.drawPolygon(pts, {
-            strokeColor: '#AAAAAA',
-            lineWidth: 0.1,
-            fillColor: '#FCFCFC' // Casi blanco
+            strokeColor: PLANO_THEME.COLORS.NEIGHBOR_STROKE,
+            lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
+            fillColor: PLANO_THEME.COLORS.NEIGHBOR_FILL
         });
         
         // Texto del lote vecino (si existe)
         const center = this.calculateVisualCenter(pts);
         if(!isNaN(center.x)) {
-            pdf.setTextColor(150);
-            pdf.setFontSize(6);
+            const grayVal = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
+            pdf.setTextColor(grayVal);
+            pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
             pdf.text(vecino.texto || '', center.x, center.y, { align: 'center'});
         }
     });
@@ -664,11 +739,18 @@ export class PlanoPerimetricoGenerator {
   }
 
   private drawProfessionalBorder(pdf: jsPDF, w: number, h: number) {
+    const { MARCO, MARGENES } = PLANO_THEME.LAYOUT;
+    
     pdf.setDrawColor(0);
-    pdf.setLineWidth(0.8);
-    pdf.rect(5, 5, w - 10, h - 10); // Marco externo grueso
-    pdf.setLineWidth(0.2);
-    pdf.rect(8, 8, w - 16, h - 16); // Marco interno fino
+    // Marco externo grueso
+    pdf.setLineWidth(MARCO.EXTERNO_WIDTH);
+    pdf.rect(MARCO.EXTERNO_OFFSET, MARCO.EXTERNO_OFFSET,
+             w - MARCO.EXTERNO_OFFSET * 2, h - MARCO.EXTERNO_OFFSET * 2);
+    
+    // Marco interno fino
+    pdf.setLineWidth(MARCO.INTERNO_WIDTH);
+    pdf.rect(MARCO.INTERNO_OFFSET, MARCO.INTERNO_OFFSET,
+             w - MARCO.INTERNO_OFFSET * 2, h - MARCO.INTERNO_OFFSET * 2);
   }
 
   private calculateVisualCenter(pts: [number, number][]): {x: number, y: number} {
@@ -678,23 +760,45 @@ export class PlanoPerimetricoGenerator {
   }
   
   private drawTitle(pdf: jsPDF, area: any, title: string) {
-    // Título sobre el mapa (opcional, estilo "Title Block" interno)
+    const { TITULO } = PLANO_THEME;
+    
     const centerX = area.x + area.width / 2;
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(0);
-    pdf.text(title, centerX, area.y - 4, { align: 'center' }); // Fuera del marco superior si hay espacio, o dentro
+    const titleY = area.y + area.height - TITULO.OFFSET_BOTTOM;
+    
+    // Fondo blanco para máscara (cubrir líneas de grilla)
+    pdf.setFillColor(255, 255, 255);
+    const fontSize = PLANO_THEME.FONTS.SIZES.H1;
+    const titleWidth = pdf.getStringUnitWidth(title) * fontSize / pdf.internal.scaleFactor;
+    pdf.rect(centerX - titleWidth/2 - TITULO.PADDING_H, titleY - TITULO.PADDING_V,
+             titleWidth + TITULO.PADDING_H * 2, TITULO.BOX_HEIGHT, 'F');
+    
+    // Texto del título
+    pdf.setFontSize(fontSize);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text(title, centerX, titleY, { align: 'center' });
   }
   
   private drawNorthCatastro(pdf: jsPDF, x: number, y: number, s: number) {
     pdf.setDrawColor(0);
-    pdf.setLineWidth(0.4);
-    pdf.line(x, y + s/2, x, y - s/2);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(8);
+    pdf.setLineWidth(PLANO_THEME.STROKES.NORTH_ARROW);
+    
+    // Aguja (Rombo alargado)
+    // Parte negra (Norte)
+    pdf.setFillColor(0, 0, 0);
+    pdf.triangle(x, y - s/2, x - s/6, y, x + s/6, y, 'F');
+    // Parte blanca (Sur)
+    pdf.setFillColor(255, 255, 255);
+    pdf.triangle(x, y + s/2, x - s/6, y, x + s/6, y, 'FD'); // Relleno blanco con borde
+    
+    // Línea central
+    pdf.line(x, y - s/2, x, y + s/2);
+    
+    // Letra N
+    pdf.setTextColor(0, 0, 0);
+    pdf.setFontSize(s); // Tamaño proporcional al símbolo
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text('N', x, y - s/2 - 2, { align: 'center' });
-    // Flecha norte estilizada
-    pdf.triangle(x, y - s/2, x - 2, y - s/2 + 5, x + 2, y - s/2 + 5, 'F');
   }
 
   private calculateTopographicData(vertices: UTMCoordinate[]) {
@@ -709,8 +813,8 @@ export class PlanoPerimetricoGenerator {
 
   private drawVerticesAndAngles(pdf: jsPDF, pts: [number, number][], angs: number[], cad: CADDrawing) {
     pts.forEach((p: [number, number], i:number) => {
-        cad.drawCircle(p[0], p[1], 0.8, { fillColor: '#FFF' });
-        pdf.setFontSize(6);
+        cad.drawCircle(p[0], p[1], 0.8, { fillColor: PLANO_THEME.COLORS.WHITE });
+        pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
         pdf.text(`V${i+1}`, p[0]+2, p[1]-2);
     });
   }
@@ -726,8 +830,8 @@ export class PlanoPerimetricoGenerator {
         // Si hay fondo oscuro (satélite), ponemos cajita blanca
         if(darkBg) pdf.rect(mx-4, my-2, 8, 4, 'F');
         
-        pdf.setFontSize(6);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+        pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
         pdf.text(`${dist.toFixed(2)}m`, mx, my+1, { align: 'center' });
     });
   }
@@ -744,5 +848,55 @@ export class PlanoPerimetricoGenerator {
      } catch(e) {
        console.warn("Error renderizando imagen de contexto", e);
      }
+  }
+
+  // ===========================================================================
+  // MÉTODO HELPER: TEXTO ADAPTATIVO
+  // ===========================================================================
+
+  /**
+   * Ajusta el tamaño de la fuente automáticamente para que el texto quepa en el ancho dado.
+   * Evita que nombres largos de propietarios se corten en el membrete.
+   *
+   * @param pdf - Instancia de jsPDF
+   * @param text - Texto a dibujar
+   * @param x - Coordenada X
+   * @param y - Coordenada Y
+   * @param maxWidth - Ancho máximo disponible (en mm)
+   * @param initialSize - Tamaño inicial de fuente (por defecto BODY del tema)
+   */
+  private drawTextAutoFit(
+    pdf: jsPDF,
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    initialSize: number = PLANO_THEME.FONTS.SIZES.BODY
+  ): void {
+    let currentSize = initialSize;
+    const minSize = PLANO_THEME.FONTS.SIZES.TINY; // No reducir más allá de TINY
+    
+    // Establecer fuente bold para el valor
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(currentSize);
+    
+    // Mientras el texto sea más ancho que el espacio disponible, reducir fuente
+    while (pdf.getStringUnitWidth(text) * currentSize / pdf.internal.scaleFactor > maxWidth && currentSize > minSize) {
+      currentSize -= 0.5;
+      pdf.setFontSize(currentSize);
+    }
+    
+    // Si aún así no cabe, truncar con elipsis
+    let finalText = text;
+    const textWidth = pdf.getStringUnitWidth(text) * currentSize / pdf.internal.scaleFactor;
+    if (textWidth > maxWidth) {
+      // Truncar caracteres hasta que quepa con "..."
+      while (pdf.getStringUnitWidth(finalText + '...') * currentSize / pdf.internal.scaleFactor > maxWidth && finalText.length > 0) {
+        finalText = finalText.slice(0, -1);
+      }
+      finalText += '...';
+    }
+    
+    pdf.text(finalText, x, y);
   }
 }
