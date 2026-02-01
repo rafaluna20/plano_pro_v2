@@ -15,6 +15,8 @@ import {
   Maximize,
   AlertCircle,
   FileText,
+  ZoomIn,
+  ZoomOut,
   PenTool,
   Layers,
   Globe,
@@ -25,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { PDFViewerWrapper } from '@/components/planos/PDFViewerWrapper';
+
 // Nota: LocationSearch se reemplaza por el buscador integrado de OSM
 import { ImportDataModal } from '@/components/planos/ImportDataModal';
 import { NeighborEditModal } from '@/components/planos/NeighborEditModal';
@@ -32,6 +35,16 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import proj4 from 'proj4';
 import { Toaster, toast } from 'react-hot-toast';
 import { UTMCoordinate } from '@/types/planos';
+
+const LocationMap = dynamic(() => import('@/components/editor/LocationMap'), { 
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center bg-slate-50">
+      <span className="text-[10px] text-slate-400">Cargando Mapa...</span>
+    </div>
+  )
+});
+
 
 // --- LEAFLET: IMPORTACIÓN DINÁMICA (Evita error 'window is not defined') ---
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
@@ -113,7 +126,36 @@ interface LoteData {
   config: {
     modoUbicacion: 'vectorial' | 'satelital' | 'imagen';
   };
+
+lotesAdyacentes:{
+    norte?:{
+      lote:string;
+      propietario:string;
+      vertices:Vertice[];
+    },
+    sur?:{
+      lote:string;
+      propietario:string;
+      vertices:Vertice[];
+    },
+    este?:{
+      lote:string;
+      propietario:string;
+      vertices:Vertice[];
+    },
+    oeste?:{
+      lote:string;
+      propietario:string;
+      vertices:Vertice[];
+    }
+  }
+
+
 }
+
+
+
+
 
 // --- ESTADO INICIAL ---
 const INITIAL_DATA: LoteData = {
@@ -177,8 +219,54 @@ const INITIAL_DATA: LoteData = {
   },
   config: {
     modoUbicacion: 'vectorial'
+  },
+  lotesAdyacentes:{
+    norte:{
+      lote:"Lote 01",
+      propietario:"Inversiones Santa Rosa S.A.C.",
+      vertices:[
+        { id: "A", x: 284500.00, y: 8670120.00 },
+        { id: "B", x: 284510.00, y: 8670120.00 },
+        { id: "C", x: 284510.00, y: 8670100.00 },
+        { id: "D", x: 284500.00, y: 8670100.00 }
+      ]
+    },
+    sur:{
+      lote:"Lote 03",
+      propietario:"Inversiones Santa Rosa S.A.C.",
+      vertices:[
+        { id: "A", x: 284500.00, y: 8670080.00 },
+        { id: "B", x: 284510.00, y: 8670080.00 },
+        { id: "C", x: 284510.00, y: 8670060.00 },
+        { id: "D", x: 284500.00, y: 8670060.00 }
+      ]
+    },
+    este:{
+      lote:"Lote 02",
+      propietario:"Inversiones Santa Rosa S.A.C.",
+      vertices:[
+        { id: "A", x: 284510.00, y: 8670100.00 },
+        { id: "B", x: 284520.00, y: 8670100.00 },
+        { id: "C", x: 284520.00, y: 8670080.00 },
+        { id: "D", x: 284510.00, y: 8670080.00 }
+      ]
+    },
+    oeste:{
+      lote:"Lote 04",
+      propietario:"Inversiones Santa Rosa S.A.C.",
+      vertices:[
+        { id: "A", x: 284490.00, y: 8670100.00 },
+        { id: "B", x: 284500.00, y: 8670100.00 },
+        { id: "C", x: 284500.00, y: 8670080.00 },
+        { id: "D", x: 284490.00, y: 8670080.00 }
+      ]
+    }
   }
+
+
 };
+
+
 
 // --- HELPERS GEOMÉTRICOS ---
 
@@ -197,6 +285,20 @@ const getCustomIcon = () => {
     shadowSize: [41, 41]
   });
 };
+
+
+const calculateArea = (vertices: Vertice[]) => {
+  if (!vertices || vertices.length < 3) return 0;
+  let area = 0;
+  for (let i = 0; i < vertices.length; i++) {
+    const p1 = vertices[i];
+    const p2 = vertices[(i + 1) % vertices.length];
+    area += (p1.x * p2.y) - (p2.x * p1.y);
+  }
+  return Math.abs(area) / 2;
+};
+
+
 
 // Conversión UTM -> LatLng para Leaflet
 const utmToLatLng = (x: number, y: number): [number, number] => {
@@ -285,7 +387,8 @@ export default function EditorPlanos() {
   const [activeTab, setActiveTab] = useState<'general' | 'membrete' | 'contexto' | 'vertices'>('general');
   const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
   const [draggingVertexIndex, setDraggingVertexIndex] = useState<number | null>(null);
-  
+    const [zoom, setZoom] = useState(1.0);
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   // Modales y Vistas
   const [showPDFViewer, setShowPDFViewer] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -442,21 +545,33 @@ export default function EditorPlanos() {
       const { vertices } = data;
       if (!vertices || vertices.length < 3) return null;
 
-      // Límites
-      let allVertices = [...vertices];
-      if (data.config.modoUbicacion === 'vectorial') {
-        data.contexto.vecinos.forEach(v => allVertices.push(...v.vertices));
-      }
+      const width = 900;  
+      const height = 600; 
+      const margin = 20;  
 
+      const rect1 = { x: margin, y: margin, w: width - (margin * 2), h: height - (margin * 2) };
+      const rightColWidth = 280;
+      const leftColWidth = Math.max(100, rect1.w - rightColWidth - 20);
+
+      const rect2 = { x: rect1.x, y: rect1.y, w: leftColWidth, h: rect1.h };
+      const rect3 = { x: rect1.x + leftColWidth + 20, y: rect1.y, w: rightColWidth, h: rect1.h };
+
+      const allVertices = [
+        ...vertices,
+        ...Object.values(data.lotesAdyacentes || {}).flatMap(info => info?.vertices || [])
+      ];
+      
       const xValues = allVertices.map(v => v.x);
       const yValues = allVertices.map(v => v.y);
-      const minX = Math.min(...xValues);
-      const maxX = Math.max(...xValues);
-      const minY = Math.min(...yValues);
-      const maxY = Math.max(...yValues);
+      
+      const minX = xValues.length > 0 ? Math.min(...xValues) : 0;
+      const maxX = xValues.length > 0 ? Math.max(...xValues) : 0;
+      const minY = yValues.length > 0 ? Math.min(...yValues) : 0;
+      const maxY = yValues.length > 0 ? Math.max(...yValues) : 0;
 
       const deltaX = Math.abs(maxX - minX) < 0.001 ? 1 : (maxX - minX);
       const deltaY = Math.abs(maxY - minY) < 0.001 ? 1 : (maxY - minY);
+
       const maxDim = Math.max(deltaX, deltaY);
       const gridStep = getGridStep(maxDim);
 
@@ -464,26 +579,16 @@ export default function EditorPlanos() {
       const viewMaxX = Math.ceil(maxX / gridStep) * gridStep;
       const viewMinY = Math.floor(minY / gridStep) * gridStep;
       const viewMaxY = Math.ceil(maxY / gridStep) * gridStep;
-
+      
       const viewDeltaX = Math.abs(viewMaxX - viewMinX) < 0.001 ? gridStep : (viewMaxX - viewMinX);
       const viewDeltaY = Math.abs(viewMaxY - viewMinY) < 0.001 ? gridStep : (viewMaxY - viewMinY);
-
-      // Dimensiones render
-      const width = 900;
-      const height = 600;
-      const margin = 20;
-      const rect1 = { x: margin, y: margin, w: width - (margin * 2), h: height - (margin * 2) };
-      const rightColWidth = 280;
-      const leftColWidth = Math.max(100, rect1.w - rightColWidth - 20);
-      const rect2 = { x: rect1.x, y: rect1.y, w: leftColWidth, h: rect1.h }; 
-      const rect3 = { x: rect1.x + leftColWidth + 20, y: rect1.y, w: rightColWidth, h: rect1.h };
 
       const padding = 60;
       const availableW = Math.max(10, rect2.w - (padding * 2));
       const availableH = Math.max(10, rect2.h - (padding * 2));
 
-      const scaleX = availableW / viewDeltaX;
-      const scaleY = availableH / viewDeltaY;
+      const scaleX = (availableW / viewDeltaX) * zoom;
+      const scaleY = (availableH / viewDeltaY) * zoom;
       const scale = Math.min(scaleX, scaleY);
 
       const drawW = viewDeltaX * scale;
@@ -491,11 +596,13 @@ export default function EditorPlanos() {
       const offsetX = rect2.x + (rect2.w - drawW) / 2;
       const offsetY = rect2.y + (rect2.h - drawH) / 2;
 
-      // Transformaciones
       const toScreen = (x: number, y: number) => {
         const sx = (x - viewMinX) * scale + offsetX;
         const sy = (offsetY + drawH) - ((y - viewMinY) * scale);
-        return { x: isFinite(sx) ? sx : 0, y: isFinite(sy) ? sy : 0 };
+        return { 
+          x: isFinite(sx) ? sx : 0, 
+          y: isFinite(sy) ? sy : 0 
+        };
       };
 
       const screenToWorld = (screenX: number, screenY: number) => {
@@ -504,25 +611,16 @@ export default function EditorPlanos() {
         return { x: x_utm, y: y_utm };
       };
 
-      // Puntos
       const points = vertices.map(v => {
-        const s = toScreen(v.x, v.y);
-        return { x: s.x, y: s.y, label: v.id, rawX: v.x, rawY: v.y };
+          const s = toScreen(v.x, v.y);
+          return { x: s.x, y: s.y, label: v.id, rawX: v.x, rawY: v.y };
       });
       const polygonPoints = points.map(p => `${p.x},${p.y}`).join(" ");
 
-      // Vecinos
-      const neighborsPolygons = data.contexto.vecinos.map(vecino => {
-        return vecino.vertices.map(v => {
-          const p = toScreen(v.x, v.y);
-          return `${p.x},${p.y}`;
-        }).join(" ");
-      });
-
-      // Grilla
       const gridLines = [];
-      const maxGridLines = 50;
+      const maxGridLines = 50; 
       let count = 0;
+      
       for (let x = viewMinX; x <= viewMaxX; x += gridStep) {
         if (count++ > maxGridLines) break;
         const pStart = toScreen(x, viewMinY);
@@ -537,19 +635,18 @@ export default function EditorPlanos() {
         gridLines.push({ type: 'h', x1: pStart.x, y1: pStart.y, x2: pEnd.x, y2: pEnd.y, label: y.toFixed(0) });
       }
 
-      // Cálculos geométricos
       let signedArea = 0;
       let centerX = 0, centerY = 0;
       let totalPerimeter = 0;
 
       for (let i = 0; i < points.length; i++) {
-        const p1 = points[i];
-        const p2 = points[(i + 1) % points.length];
-        signedArea += (p2.x - p1.x) * (p2.y + p1.y);
-        centerX += p1.x; centerY += p1.y;
+          const p1 = points[i];
+          const p2 = points[(i + 1) % points.length];
+          signedArea += (p2.x - p1.x) * (p2.y + p1.y);
+          centerX += p1.x; centerY += p1.y;
       }
       centerX /= points.length; centerY /= points.length;
-      const isClockwise = signedArea < 0;
+      const isClockwise = signedArea < 0; 
 
       const technicalData = points.map((p, i) => {
         const nextIndex = (i + 1) % points.length;
@@ -569,21 +666,23 @@ export default function EditorPlanos() {
 
         let angleInternal = 0, startArc = 0, endArc = 0;
         if (isClockwise) {
-          let diff = normPrev - normNext;
-          if (diff < 0) diff += 360;
-          angleInternal = diff;
-          startArc = normNext + 90; endArc = normPrev + 90;
+            let diff = normPrev - normNext;
+            if (diff < 0) diff += 360;
+            angleInternal = diff;
+            startArc = normNext + 90; endArc = normPrev + 90;
         } else {
-          let diff = normNext - normPrev;
-          if (diff < 0) diff += 360;
-          angleInternal = diff;
-          startArc = normPrev + 90; endArc = normNext + 90;
+            let diff = normNext - normPrev;
+            if (diff < 0) diff += 360;
+            angleInternal = diff;
+            startArc = normPrev + 90; endArc = normNext + 90;
         }
-
+        
         const arcPath = describeArc(p.x, p.y, 20, startArc, endArc);
+        
         let bisectorAngle = startArc + (angleInternal / 2);
-        if (endArc < startArc) bisectorAngle = startArc + ((360 - startArc + endArc) / 2);
+        if (endArc < startArc) bisectorAngle = startArc + ((360 - startArc + endArc)/2);
         const labelPos = polarToCartesian(p.x, p.y, 32, bisectorAngle);
+        
         const midX = (p.x + nextP.x) / 2;
         const midY = (p.y + nextP.y) / 2;
 
@@ -598,7 +697,6 @@ export default function EditorPlanos() {
         };
       });
 
-      // Mini mapa ubicación
       const locMapH = 180;
       const locMapW = rect3.w;
       const locMapX = rect3.x;
@@ -611,53 +709,55 @@ export default function EditorPlanos() {
 
       const centerRawX = (minX + maxX) / 2;
       const centerRawY = (minY + maxY) / 2;
-
+      
       const toLocScreen = (x: number, y: number) => ({
-        x: locMapX + (locMapW / 2) + (x - centerRawX) * locScale,
-        y: locMapY + (locMapH / 2) - (y - centerRawY) * locScale
+        x: locMapX + (locMapW/2) + (x - centerRawX) * locScale,
+        y: locMapY + (locMapH/2) - (y - centerRawY) * locScale
       });
-
+      
       const locPolyPoints = vertices.map(v => {
         const p = toLocScreen(v.x, v.y);
         return `${p.x},${p.y}`;
       }).join(" ");
 
       const blockMargin = Math.max(deltaX, deltaY) * 1.2;
-      const bMin = toLocScreen(minX - blockMargin / 2, maxY + blockMargin / 2);
-      const bMax = toLocScreen(maxX + blockMargin / 2, minY - blockMargin / 2);
-
-      const block = {
-        x: Math.min(bMin.x, bMax.x),
-        y: Math.min(bMin.y, bMax.y),
-        w: Math.abs(bMax.x - bMin.x),
-        h: Math.abs(bMax.y - bMin.y)
-      };
+      const bMin = toLocScreen(minX - blockMargin/2, maxY + blockMargin/2);
+      const bMax = toLocScreen(maxX + blockMargin/2, minY - blockMargin/2);
 
       const tableStartY = locMapY + locMapH + 40;
       const membreteH = 110;
       const membreteY = rect3.y + rect3.h - membreteH;
-      
-      // Datos para Leaflet
-      const leafletCenter = utmToLatLng(centerRawX, centerRawY);
-      const leafletPolygon = vertices.map(v => utmToLatLng(v.x, v.y));
 
-      return {
+      const adyacentes = Object.entries(data.lotesAdyacentes || {}).map(([key, info]) => {
+        if (!info || !info.vertices) return null;
+        const pts = info.vertices.map(v => toScreen(v.x, v.y));
+        const poly = pts.map(p => `${p.x},${p.y}`).join(" ");
+        
+        // Calcular centro para la etiqueta
+        let cx = 0, cy = 0;
+        pts.forEach(p => { cx += p.x; cy += p.y; });
+        cx /= pts.length;
+        cy /= pts.length;
+
+        return { key, lote: info.lote, poly, labelPos: { x: cx, y: cy } };
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
+
+      return { 
         layout: { width, height, rect2, rect3 },
-        points, polygonPoints, neighborsPolygons, gridLines, technicalData,
+        points, polygonPoints, gridLines, technicalData, adyacentes,
         centerLabel: { x: centerX, y: centerY, perimeter: totalPerimeter.toFixed(2) },
         elements: {
-          locMap: { x: locMapX, y: locMapY, w: locMapW, h: locMapH, polyPoints: locPolyPoints, block },
+          locMap: { x: locMapX, y: locMapY, w: locMapW, h: locMapH, polyPoints: locPolyPoints, block: {x: bMin.x, y: bMin.y, w: Math.abs(bMax.x - bMin.x), h: Math.abs(bMax.y - bMin.y)} },
           table: { x: rect3.x, y: tableStartY, w: rect3.w },
           membrete: { x: rect3.x, y: membreteY, w: rect3.w, h: membreteH }
         },
-        screenToWorld,
-        leaflet: { center: leafletCenter, polygon: leafletPolygon }
+        screenToWorld
       };
     } catch (e) {
       console.error("Error calculando geometría:", e);
       return null;
     }
-  }, [data]);
+  }, [data.vertices, data.lotesAdyacentes, zoom]);
 
   // Handlers UI
   const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -665,15 +765,51 @@ export default function EditorPlanos() {
       const rect = svgRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
+
+       const oldCoords = data.vertices[draggingVertexIndex];
       const newCoords = previewData.screenToWorld(mouseX, mouseY);
 
       const newVertices = [...data.vertices];
       newVertices[draggingVertexIndex] = { ...newVertices[draggingVertexIndex], x: Number(newCoords.x.toFixed(2)), y: Number(newCoords.y.toFixed(2)) };
-      setData(prev => ({ ...prev, vertices: newVertices }));
+      
+      
+      
+    const newArea = calculateArea(newVertices);
+
+      // Sincronizar con lotes adyacentes
+      const newLotesAdyacentes = { ...data.lotesAdyacentes };
+      const epsilon = 0.1;
+
+      Object.keys(newLotesAdyacentes).forEach((key) => {
+        const side = key as keyof typeof data.lotesAdyacentes;
+        const info = newLotesAdyacentes[side];
+        if (info && info.vertices) {
+          const updatedVertices = info.vertices.map(v => {
+            const dx = Math.abs(v.x - oldCoords.x);
+            const dy = Math.abs(v.y - oldCoords.y);
+            if (dx < epsilon && dy < epsilon) {
+              return { ...v, x: newCoords.x, y: newCoords.y };
+            }
+            return v;
+          });
+          newLotesAdyacentes[side] = { ...info, vertices: updatedVertices };
+        }
+      });
+
+      setData(prev => ({ 
+        ...prev, 
+        vertices: newVertices, 
+        lotesAdyacentes: newLotesAdyacentes,
+        dimensiones: { ...prev.dimensiones, area: parseFloat(newArea.toFixed(2)) }
+      }));
+
+
     }
   };
 
   const handleInputChange = (section: 'dimensiones' | 'colindantes', field: string, value: string | number) => {
+
+
     setData(prev => ({
       ...prev,
       [section]: {
@@ -689,9 +825,42 @@ export default function EditorPlanos() {
     setData(prev => ({ ...prev, [field]: value }));
   };
   const handleVertexChange = (index: number, field: keyof Vertice, value: string) => {
+
+ const newVal = field === 'id' ? value : parseFloat(value) || 0;
+    const oldCoords = { ...data.vertices[index] };
+
     const newVertices = [...data.vertices];
-    newVertices[index] = { ...newVertices[index], [field]: field === 'id' ? value : parseFloat(value) || 0 };
-    setData(prev => ({ ...prev, vertices: newVertices }));
+   newVertices[index] = { ...newVertices[index], [field]: newVal };
+
+    const newArea = calculateArea(newVertices);
+
+    // Sincronizar con lotes adyacentes si cambió X o Y
+    let newLotesAdyacentes = { ...data.lotesAdyacentes };
+    if (field === 'x' || field === 'y') {
+      const epsilon = 0.1;
+      Object.keys(newLotesAdyacentes).forEach((key) => {
+        const side = key as keyof typeof data.lotesAdyacentes;
+        const info = newLotesAdyacentes[side];
+        if (info && info.vertices) {
+          const updatedVertices = info.vertices.map(v => {
+            const dx = Math.abs(v.x - oldCoords.x);
+            const dy = Math.abs(v.y - oldCoords.y);
+            if (dx < epsilon && dy < epsilon) {
+              return { ...v, [field]: newVal as number };
+            }
+            return v;
+          });
+          newLotesAdyacentes[side] = { ...info, vertices: updatedVertices };
+        }
+      });
+    }
+
+    setData(prev => ({ 
+      ...prev, 
+      vertices: newVertices, 
+      lotesAdyacentes: newLotesAdyacentes,
+      dimensiones: { ...prev.dimensiones, area: parseFloat(newArea.toFixed(2)) }
+    }));
   };
   const addVertex = () => {
     const lastV = data.vertices[data.vertices.length - 1];
@@ -1194,9 +1363,21 @@ export default function EditorPlanos() {
                     </span>
                   </div>
                 </div>
+
+
+   
+      <div className="flex gap-4 items-center">
+                <div className="flex bg-white rounded-lg border border-slate-200 p-0.5 shadow-sm">
+                  <button onClick={() => setZoom(prev => Math.max(0.1, prev - 0.2))} className="p-1.5 hover:bg-slate-50 text-slate-600 rounded-md transition-colors" title="Zoom Out"><ZoomOut size={16} /></button>
+                  <div className="px-2 flex items-center text-[10px] font-bold text-slate-500 border-x border-slate-100 min-w-[50px] justify-center">{Math.round(zoom * 100)}%</div>
+                  <button onClick={() => setZoom(prev => Math.min(5, prev + 0.2))} className="p-1.5 hover:bg-slate-50 text-slate-600 rounded-md transition-colors" title="Zoom In"><ZoomIn size={16} /></button>
+                  <button onClick={() => setZoom(1.0)} className="p-1.5 hover:bg-slate-50 text-blue-800 rounded-md transition-colors text-[10px] font-bold" title="Reset Zoom">1:1</button>
+                </div>
                 <div className="flex gap-4 text-xs text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm items-center">
-                  <MousePointer2 size={12} className="text-slate-400" />
-                  <span>Arrastra los vértices para editar</span>
+                   <MousePointer2 size={12} className="text-slate-400" />
+                   <span>Arrastra los vértices para editar</span>
+                </div>
+
                 </div>
               </div>
 
@@ -1266,10 +1447,11 @@ export default function EditorPlanos() {
                         ))}
                       </g>
 
+
+
+
                       {/* VECINOS EN PERIMÉTRICO */}
-                      {data.config.modoUbicacion === 'vectorial' && previewData.neighborsPolygons.map((poly, i) => (
-                        <polygon key={`vecino-main-${i}`} points={poly} fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" style={{ pointerEvents: 'none' }} />
-                      ))}
+                    
 
                       <g transform={`translate(${previewData.layout.rect2.x + previewData.layout.rect2.w - 40}, ${previewData.layout.rect2.y + 40})`} style={{ pointerEvents: 'none' }}>
                         <line x1="0" y1="0" x2="0" y2="-25" stroke="#0f172a" strokeWidth="2" />
@@ -1277,10 +1459,46 @@ export default function EditorPlanos() {
                         <text x="0" y="-30" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#0f172a">N</text>
                       </g>
 
+{/* LOTES ADYACENTES */}
+                    {previewData.adyacentes.map((ady, idx) => {
+                      if (!ady) return null;
+                      return (
+                        <g key={`ady-${idx}`} style={{ pointerEvents: 'none' }}>
+                          <polygon 
+                            points={ady.poly} 
+                            fill="#f8fafc" 
+                            stroke="#cbd5e1" 
+                            strokeWidth="1" 
+                            strokeDasharray="4,2" 
+                          />
+                          <text 
+                            x={ady.labelPos.x} 
+                            y={ady.labelPos.y} 
+                            textAnchor="middle" 
+                            fontSize="7" 
+                            fill="#94a3b8" 
+                            fontWeight="bold"
+                          >
+                            {ady.lote}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+
+
+
                       <polygon points={previewData.polygonPoints} fill="url(#diagonalHatch)" stroke="#000000" strokeWidth="2.5" strokeLinejoin="round" className="drop-shadow-sm" style={{ pointerEvents: 'none' }} />
 
+
+<polygon points={previewData.polygonPoints} fill="rgba(15, 23, 42, 0.08)" style={{ pointerEvents: 'none' }} />
+
+
                       {/* Centroide Label */}
-                      <g transform={`translate(${previewData.centerLabel.x}, ${previewData.centerLabel.y})`} style={{ pointerEvents: 'none' }}>
+
+                   
+                  <g transform={`translate(${previewData.elements.locMap.x}, ${previewData.elements.locMap.y})`}>
+
                         <rect x="-50" y="-12" width="100" height="24" fill="white" stroke="#000" strokeWidth="0.5" rx="4" fillOpacity="0.9" />
                         <text x="0" y="-2" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#000">ÁREA: {data.dimensiones.area} m²</text>
                         <text x="0" y="8" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#000">PERÍM: {previewData.centerLabel.perimeter} ml</text>
@@ -1309,47 +1527,66 @@ export default function EditorPlanos() {
                     </g>
 
                     {/* COLUMNA DERECHA */}
+ <g transform={`translate(${previewData.elements.locMap.x}, ${previewData.elements.locMap.y})`}>
+                    <text x={previewData.elements.locMap.w/2} y="-8" textAnchor="middle" fontSize="9" fontWeight="bold">PLANO DE UBICACIÓN</text>
+                    <rect x="0" y="0" width={previewData.elements.locMap.w} height={previewData.elements.locMap.h} fill="white" stroke="#000" strokeWidth="1"/>
+                    
+                    <foreignObject 
+                      x="0.5" 
+                      y="0.5" 
+                      width={previewData.elements.locMap.w - 1} 
+                      height={previewData.elements.locMap.h - 1}
+                    >
+                      <LocationMap 
+                        vertices={data.vertices} 
+                        adyacentes={Object.values(data.lotesAdyacentes || {}).filter((a): a is NonNullable<typeof a> => a !== null).map(a => ({ vertices: a.vertices, lote: a.lote }))} 
+                        interactive={false}
+                      />
+                    </foreignObject>
 
-                    {/* Ubicación (Mini Mapa) */}
-                    <g transform={`translate(${previewData.elements.locMap.x}, ${previewData.elements.locMap.y})`} style={{ pointerEvents: 'none' }}>
-                      <text x={previewData.elements.locMap.w / 2} y="-8" textAnchor="middle" fontSize="9" fontWeight="bold">PLANO DE UBICACIÓN</text>
-                      <rect x="0" y="0" width={previewData.elements.locMap.w} height={previewData.elements.locMap.h} fill="white" stroke="#000" strokeWidth="1" />
-                      
-                      <defs>
-                        <clipPath id="locMapClip">
-                          <rect x="0" y="0" width={previewData.elements.locMap.w} height={previewData.elements.locMap.h} />
-                        </clipPath>
-                      </defs>
-                      <g clipPath="url(#locMapClip)">
-                        <rect x={previewData.elements.locMap.block.x} y={previewData.elements.locMap.block.y} width={previewData.elements.locMap.block.w} height={previewData.elements.locMap.block.h} fill="none" stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
-                        <polygon points={previewData.elements.locMap.polyPoints} fill="url(#locationHatch)" stroke="#000" strokeWidth="1.5" />
-                      </g>
+                    <foreignObject
+                      x={previewData.elements.locMap.w - 25}
+                      y={previewData.elements.locMap.h - 25}
+                      width="20"
+                      height="20"
+                    >
+                      <button 
+                        onClick={() => setIsMapFullscreen(true)}
+                        className="w-full h-full bg-white/80 hover:bg-white rounded border border-slate-200 flex items-center justify-center text-slate-600 transition-colors shadow-sm"
+                        title="Ampliar Mapa"
+                      >
+                        <Maximize size={12} />
+                      </button>
+                    </foreignObject>
+
+                    <g style={{ pointerEvents: 'none' }}>
                       <text x={previewData.elements.locMap.w - 15} y="20" fontSize="10" fontWeight="bold">N</text>
-                      <line x1={previewData.elements.locMap.w - 11} y1="22" x2={previewData.elements.locMap.w - 11} y2="12" stroke="#000" strokeWidth="1" />
+                      <line x1={previewData.elements.locMap.w - 11} y1="22" x2={previewData.elements.locMap.w - 11} y2="12" stroke="#000" strokeWidth="1"/>
                       <polygon points={`${previewData.elements.locMap.w - 11},12 ${previewData.elements.locMap.w - 13},15 ${previewData.elements.locMap.w - 9},15`} fill="#000" />
                     </g>
+                  </g>
 
-                    {/* Tabla */}
-                    <g transform={`translate(${previewData.elements.table.x}, ${previewData.elements.table.y})`} style={{ pointerEvents: 'none' }}>
-                      <rect x="0" y="0" width={previewData.elements.table.w} height="20" fill="#000000" />
-                      <text x={previewData.elements.table.w / 2} y="14" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">CUADRO DE DATOS TÉCNICOS</text>
-                      <g transform="translate(0, 20)">
-                        <rect x="0" y="0" width={previewData.elements.table.w} height="15" fill="#f1f5f9" stroke="#000" strokeWidth="0.5" />
-                        {[0.12, 0.25, 0.40, 0.55, 0.77].map((p, k) => (
-                          <line key={k} x1={previewData.elements.table.w * p} y1="0" x2={previewData.elements.table.w * p} y2="15" stroke="#000" strokeWidth="0.5" />
-                        ))}
-                        <text x={previewData.elements.table.w * 0.06} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">V</text>
-                        <text x={previewData.elements.table.w * 0.185} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">LADO</text>
-                        <text x={previewData.elements.table.w * 0.325} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">DIST</text>
-                        <text x={previewData.elements.table.w * 0.475} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">ANG</text>
-                        <text x={previewData.elements.table.w * 0.66} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">ESTE (X)</text>
-                        <text x={previewData.elements.table.w * 0.885} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">NORTE (Y)</text>
-                      </g>
-                      {previewData.technicalData.map((row, i) => (
+                  {/* Tabla */}
+                  <g transform={`translate(${previewData.elements.table.x}, ${previewData.elements.table.y})`} style={{ pointerEvents: 'none' }}>
+                    <rect x="0" y="0" width={previewData.elements.table.w} height="20" fill="#000000" />
+                    <text x={previewData.elements.table.w/2} y="14" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">CUADRO DE DATOS TÉCNICOS</text>
+                    <g transform="translate(0, 20)">
+                       <rect x="0" y="0" width={previewData.elements.table.w} height="15" fill="#f1f5f9" stroke="#000" strokeWidth="0.5"/>
+                       {[0.12, 0.25, 0.40, 0.55, 0.77].map((p, k) => (
+                         <line key={k} x1={previewData.elements.table.w * p} y1="0" x2={previewData.elements.table.w * p} y2="15" stroke="#000" strokeWidth="0.5"/>
+                       ))}
+                       <text x={previewData.elements.table.w * 0.06} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">V</text>
+                       <text x={previewData.elements.table.w * 0.185} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">LADO</text>
+                       <text x={previewData.elements.table.w * 0.325} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">DIST</text>
+                       <text x={previewData.elements.table.w * 0.475} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">ANG</text>
+                       <text x={previewData.elements.table.w * 0.66} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">ESTE (X)</text>
+                       <text x={previewData.elements.table.w * 0.885} y="11" textAnchor="middle" fontSize="7" fontWeight="bold">NORTE (Y)</text>
+                    </g>
+                    {previewData.technicalData.map((row, i) => (
                         <g key={`table-row-${i}`} transform={`translate(0, ${35 + (i * 15)})`}>
-                          <rect x="0" y="0" width={previewData.elements.table.w} height="15" fill={i % 2 === 0 ? "white" : "#f8fafc"} stroke="#000" strokeWidth="0.5" />
+                          <rect x="0" y="0" width={previewData.elements.table.w} height="15" fill={i % 2 === 0 ? "white" : "#f8fafc"} stroke="#000" strokeWidth="0.5"/>
                           {[0.12, 0.25, 0.40, 0.55, 0.77].map((p, k) => (
-                            <line key={k} x1={previewData.elements.table.w * p} y1="0" x2={previewData.elements.table.w * p} y2="15" stroke="#000" strokeWidth="0.5" />
+                             <line key={k} x1={previewData.elements.table.w * p} y1="0" x2={previewData.elements.table.w * p} y2="15" stroke="#000" strokeWidth="0.5"/>
                           ))}
                           <text x={previewData.elements.table.w * 0.06} y="11" textAnchor="middle" fontSize="8" fontWeight="bold">{row.vertex}</text>
                           <text x={previewData.elements.table.w * 0.185} y="11" textAnchor="middle" fontSize="8">{row.side}</text>
@@ -1358,30 +1595,31 @@ export default function EditorPlanos() {
                           <text x={previewData.elements.table.w * 0.66} y="11" textAnchor="middle" fontSize="8">{row.raw.x}</text>
                           <text x={previewData.elements.table.w * 0.885} y="11" textAnchor="middle" fontSize="8">{row.raw.y}</text>
                         </g>
-                      ))}
-                    </g>
+                    ))}
+                  </g>
 
-                    {/* Membrete */}
-                    <g transform={`translate(${previewData.elements.membrete.x}, ${previewData.elements.membrete.y})`} style={{ pointerEvents: 'none' }}>
-                      <rect x="0" y="0" width={previewData.elements.membrete.w} height={previewData.elements.membrete.h} fill="white" stroke="#000" strokeWidth="2" />
-                      <line x1={previewData.elements.membrete.w * 0.65} y1="0" x2={previewData.elements.membrete.w * 0.65} y2={previewData.elements.membrete.h} stroke="#000" strokeWidth="1" />
-                      <line x1="0" y1="25" x2={previewData.elements.membrete.w * 0.65} y2="25" stroke="#000" strokeWidth="1" />
-                      <line x1="0" y1="50" x2={previewData.elements.membrete.w * 0.65} y2="50" stroke="#000" strokeWidth="1" />
-                      <line x1="0" y1="75" x2={previewData.elements.membrete.w * 0.65} y2="75" stroke="#000" strokeWidth="1" />
-                      <text x="5" y="10" fontSize="7" fill="#666">PROYECTO:</text>
-                      <text x="5" y="20" fontSize="8" fill="#000" fontWeight="bold">{data.membrete.proyecto.substring(0, 35)}</text>
-                      <text x="5" y="35" fontSize="7" fill="#666">PLANO:</text>
-                      <text x="5" y="45" fontSize="8" fill="#000" fontWeight="bold">{data.membrete.plano}</text>
-                      <text x="5" y="60" fontSize="7" fill="#666">PROFESIONAL:</text>
-                      <text x="50" y="60" fontSize="7" fill="#000">{data.membrete.profesional}</text>
-                      <text x="5" y="85" fontSize="7" fill="#666">FECHA:</text>
-                      <text x="35" y="85" fontSize="7" fill="#000">{data.membrete.fecha}</text>
-                      <text x="90" y="85" fontSize="7" fill="#666">ESC:</text>
-                      <text x="110" y="85" fontSize="7" fill="#000">{data.membrete.escala}</text>
-                      <text x={previewData.elements.membrete.w * 0.825} y="30" fontSize="10" fill="#666" textAnchor="middle">LÁMINA</text>
-                      <text x={previewData.elements.membrete.w * 0.825} y="70" fontSize="32" fill="#000" fontWeight="bold" textAnchor="middle">{data.membrete.lamina}</text>
-                    </g>
-                  </svg>
+                  {/* Membrete */}
+                  <g transform={`translate(${previewData.elements.membrete.x}, ${previewData.elements.membrete.y})`} style={{ pointerEvents: 'none' }}>
+                    <rect x="0" y="0" width={previewData.elements.membrete.w} height={previewData.elements.membrete.h} fill="white" stroke="#000" strokeWidth="2"/>
+                    <line x1={previewData.elements.membrete.w * 0.65} y1="0" x2={previewData.elements.membrete.w * 0.65} y2={previewData.elements.membrete.h} stroke="#000" strokeWidth="1"/>
+                    <line x1="0" y1="25" x2={previewData.elements.membrete.w * 0.65} y2="25" stroke="#000" strokeWidth="1"/>
+                    <line x1="0" y1="50" x2={previewData.elements.membrete.w * 0.65} y2="50" stroke="#000" strokeWidth="1"/>
+                    <line x1="0" y1="75" x2={previewData.elements.membrete.w * 0.65} y2="75" stroke="#000" strokeWidth="1"/>
+                    <text x="5" y="10" fontSize="7" fill="#666">PROYECTO:</text>
+                    <text x="5" y="20" fontSize="8" fill="#000" fontWeight="bold">{data.membrete.proyecto.substring(0, 35)}</text>
+                    <text x="5" y="35" fontSize="7" fill="#666">PLANO:</text>
+                    <text x="5" y="45" fontSize="8" fill="#000" fontWeight="bold">{data.membrete.plano}</text>
+                    <text x="5" y="60" fontSize="7" fill="#666">PROFESIONAL:</text>
+                    <text x="50" y="60" fontSize="7" fill="#000">{data.membrete.profesional}</text>
+                    <text x="5" y="85" fontSize="7" fill="#666">FECHA:</text>
+                    <text x="35" y="85" fontSize="7" fill="#000">{data.membrete.fecha}</text>
+                    <text x="90" y="85" fontSize="7" fill="#666">ESC:</text>
+                    <text x="110" y="85" fontSize="7" fill="#000">{data.membrete.escala}</text>
+                    <text x={previewData.elements.membrete.w * 0.825} y="30" fontSize="10" fill="#666" textAnchor="middle">LÁMINA</text>
+                    <text x={previewData.elements.membrete.w * 0.825} y="70" fontSize="32" fill="#000" fontWeight="bold" textAnchor="middle">{data.membrete.lamina}</text>
+                  </g>
+
+                </svg>
                 ) : (
                   <div className="text-slate-400 flex flex-col items-center justify-center h-full gap-2">
                     <AlertCircle size={48} className="mb-2 opacity-20 text-red-500" />
@@ -1415,6 +1653,43 @@ export default function EditorPlanos() {
         </main>
 
       </div>
+
+{/* MODAL MAPA FULLSCREEN */}
+      {isMapFullscreen && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 animate-fadeIn">
+          <div className="bg-white w-full h-full rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <MapPin className="text-blue-800" size={20} />
+                  Plano de Ubicación Dinámico
+                </h3>
+                <p className="text-xs text-slate-500">Vista ampliada con referencia geográfica real</p>
+              </div>
+              <button 
+                onClick={() => setIsMapFullscreen(false)}
+                className="p-2 hover:bg-slate-200 text-slate-500 rounded-full transition-colors"
+                title="Cerrar"
+              >
+                <Maximize size={24} className="rotate-45" /> 
+              </button>
+            </div>
+            <div className="flex-1">
+              <LocationMap 
+                vertices={data.vertices} 
+                adyacentes={Object.values(data.lotesAdyacentes || {}).filter((a): a is NonNullable<typeof a> => a !== null).map(a => ({ vertices: a.vertices, lote: a.lote }))} 
+                interactive={true}
+              />
+            </div>
+            <div className="px-6 py-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-400">
+               <span>Puntual WGS84 / Zona 18S</span>
+               <span>Escala Visual Variable</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       <ImportDataModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
