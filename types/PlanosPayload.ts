@@ -1,9 +1,9 @@
 /**
  * PlanosPayload.ts - Definiciones de Tipos para API Híbrida de Planos
- * 
+ *
  * Este archivo define el contrato de datos para la generación de planos
  * con lógica híbrida: Prioridad de Datos Registrales con Fallback Geométrico
- * 
+ *
  * Versión: v4 (REQ-HYBRID-001)
  * Stack: Next.js + Turf.js + jsPDF
  */
@@ -15,19 +15,19 @@
 export type Coordinates = number[][];
 
 export interface Geometry<T = any> {
-  type: 'Polygon' | 'Point' | 'LineString';
+  type: "Polygon" | "Point" | "LineString";
   coordinates: T;
 }
 
 export interface Feature<G = Geometry, P = any> {
-  type: 'Feature';
+  type: "Feature";
   id?: string;
   properties: P;
   geometry: G;
 }
 
 export interface FeatureCollection<G = Geometry, P = any> {
-  type: 'FeatureCollection';
+  type: "FeatureCollection";
   features: Feature<G, P>[];
 }
 
@@ -41,36 +41,36 @@ export interface FeatureCollection<G = Geometry, P = any> {
 export interface LinderoRegistral {
   /** Índice del lindero (0-based, orden antihorario desde frente) */
   index: number;
-  
+
   /** Descripción del tramo (ej: "V1 - V2") */
   tramo: string;
-  
+
   /** Longitud como texto registral (puede diferir de la geometría) */
   longitudTexto: string;
-  
+
   /** Ángulo interno en el vértice (en grados, calculado automáticamente) */
   anguloInterno?: number;
-  
+
   /** Descripción textual de la colindancia */
   colindanciaTexto: string;
-  
+
   /** Orientación cardinal o relativa */
-  orientacion: 'FRENTE' | 'DERECHA' | 'FONDO' | 'IZQUIERDA' | 'ESQUINA';
+  orientacion: "FRENTE" | "DERECHA" | "FONDO" | "IZQUIERDA" | "ESQUINA";
 }
 
 /**
  * Datos oficiales de Registros Públicos
- * 
+ *
  * IMPORTANTE: Estos datos tienen PRIORIDAD sobre cálculos geométricos
  * pero pueden ser `null` si no están disponibles (entonces se calcula)
  */
 export interface DatosRegistrales {
   /** Área oficial en m² (null = calcular desde geometría) */
   areaOficial: number | null;
-  
+
   /** Perímetro oficial en ml (null = calcular desde geometría) */
   perimetroOficial: number | null;
-  
+
   /** Array de linderos registrales (null = derivar desde geometría) */
   linderos: LinderoRegistral[] | null;
 }
@@ -96,7 +96,7 @@ export interface IdentificadorLote {
 export interface InformacionComercial {
   precio?: number;
   moneda?: string;
-  estado?: 'libre' | 'vendido' | 'ocupado' | 'reservado';
+  estado?: "libre" | "vendido" | "ocupado" | "reservado";
   fechaVenta?: string;
 }
 
@@ -116,7 +116,7 @@ export interface UbicacionAdministrativa {
 export interface Titularidad {
   nombre: string;
   documento?: {
-    tipo: 'DNI' | 'RUC' | 'CE' | 'PAS';
+    tipo: "DNI" | "RUC" | "CE" | "PAS";
     numero: string;
   };
   partidaRegistral?: string;
@@ -150,19 +150,19 @@ export type LoteObjetivo = Feature<
  */
 export interface ContextoElementoProperties {
   /** Tipo de elemento */
-  tipo: 'lote' | 'calle' | 'area_verde' | 'equipamiento';
-  
+  tipo: "lote" | "calle" | "area_verde" | "equipamiento";
+
   /** Nombre o número identificador */
   nombre?: string;
   numeroLote?: string;
-  
+
   /** Estado (para lotes) */
-  estado?: 'libre' | 'vendido' | 'ocupado';
-  
+  estado?: "libre" | "vendido" | "ocupado";
+
   /** Propiedades de vía (para calles) */
   anchoVia?: number;
-  posicionRelativa?: 'NORTE' | 'SUR' | 'ESTE' | 'OESTE';
-  
+  posicionRelativa?: "NORTE" | "SUR" | "ESTE" | "OESTE";
+
   /** Descripción alternativa */
   descripcionAlterna?: string;
 }
@@ -198,10 +198,16 @@ export interface ConfiguracionImpresion {
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;
-  formatoPapel: 'A3' | 'A4' | 'A2';
-  orientacion: 'landscape' | 'portrait';
+  formatoPapel: "A3" | "A4" | "A2";
+  orientacion: "landscape" | "portrait";
   escala: string | null; // "1/500" o null para auto
   estilos: EstilosPlano;
+  /** Modo de ubicación para el croquis: vectorial (SVG), satelital (imagen satélite), imagen */
+  modoUbicacion?: "vectorial" | "satelital" | "imagen";
+  /** URL del logo de la empresa. Si está vacío/undefined, se muestra el texto "LOGO" */
+  logoUrl?: string;
+  /** URL de la imagen general para el modo 'imagen' */
+  imagenGeneral?: string;
 }
 
 // ============================================================================
@@ -215,7 +221,10 @@ export interface MetadataSolicitud {
   solicitudId: string;
   timestamp: string; // ISO 8601
   crs: string; // Sistema de coordenadas (ej: "EPSG:32718")
-  logicaAplicada: 'PRIORIDAD_REGISTRAL_CON_FALLBACK_GEOMETRICO' | 'SOLO_GEOMETRICO' | 'SOLO_REGISTRAL';
+  logicaAplicada:
+    | "PRIORIDAD_REGISTRAL_CON_FALLBACK_GEOMETRICO"
+    | "SOLO_GEOMETRICO"
+    | "SOLO_REGISTRAL";
 }
 
 // ============================================================================
@@ -224,7 +233,7 @@ export interface MetadataSolicitud {
 
 /**
  * Estructura completa del payload para generación de planos híbridos
- * 
+ *
  * Este es el contrato principal entre el cliente y la API.
  * Implementa la lógica:
  * 1. Si `datosRegistrales.areaOficial` existe → usar ese valor
@@ -234,16 +243,16 @@ export interface MetadataSolicitud {
 export interface PlanoPayloadHibrido {
   /** Metadatos de la solicitud */
   meta: MetadataSolicitud;
-  
+
   /** Lote principal (geometría + propiedades) */
   loteObjetivo: LoteObjetivo;
-  
+
   /** Datos oficiales (pueden ser null para cálculo automático) */
   datosRegistrales: DatosRegistrales;
-  
+
   /** Contexto geoespacial (vecinos y vías) */
   contexto: ContextoGeoespacial;
-  
+
   /** Configuración de generación */
   configImpresion: ConfiguracionImpresion;
 }
@@ -259,7 +268,7 @@ export interface DatosCalculados {
   areaCalculada: number;
   perimetroCalculado: number;
   linderosCalculados: LinderoRegistral[];
-  fuenteDatos: 'REGISTRAL' | 'CALCULADO' | 'MIXTO';
+  fuenteDatos: "REGISTRAL" | "CALCULADO" | "MIXTO";
 }
 
 /**
@@ -270,7 +279,7 @@ export interface PlanoResponseExito {
   data: {
     planoId: string;
     pdfUrl?: string; // URL del PDF generado (si está disponible inmediatamente)
-    status: 'pending' | 'processing' | 'completed';
+    status: "pending" | "processing" | "completed";
     datosUtilizados: DatosCalculados;
   };
 }
@@ -321,14 +330,14 @@ export function requiereCalculoGeometrico(datos: DatosRegistrales): boolean {
 export function esPayloadValido(payload: any): payload is PlanoPayloadHibrido {
   return (
     payload &&
-    typeof payload === 'object' &&
+    typeof payload === "object" &&
     payload.meta &&
     payload.loteObjetivo &&
-    payload.loteObjetivo.type === 'Feature' &&
+    payload.loteObjetivo.type === "Feature" &&
     payload.loteObjetivo.geometry &&
-    payload.loteObjetivo.geometry.type === 'Polygon' &&
+    payload.loteObjetivo.geometry.type === "Polygon" &&
     payload.datosRegistrales &&
     payload.contexto &&
-    payload.contexto.type === 'FeatureCollection'
+    payload.contexto.type === "FeatureCollection"
   );
 }

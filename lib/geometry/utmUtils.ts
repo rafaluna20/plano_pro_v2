@@ -9,9 +9,10 @@ const UTM_18S = '+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs';
  * Convierte coordenadas UTM a Lat/Lng
  */
 export function utmToLatLng(utm: UTMCoordinate): [number, number] {
-  const [lat, lng] = proj4(UTM_18S, WGS84, utm);
+  const [lng, lat] = proj4(UTM_18S, WGS84, utm);
   return [lat, lng];
 }
+
 
 /**
  * Convierte coordenadas Lat/Lng a UTM
