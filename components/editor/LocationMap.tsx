@@ -19,10 +19,11 @@ function MapBoundsSetter({ bounds }: { bounds: L.LatLngBounds | null }) {
 interface LocationMapProps {
   vertices: Array<{ x: number, y: number }>;
   adyacentes: Array<{ vertices: Array<{ x: number, y: number }>, lote: string }>;
+  contexto?: { vecinos: Array<{ id: string, nombre: string, vertices: Array<{ x: number, y: number }> }> };
   interactive?: boolean;
 }
 
-function LocationMapInner({ vertices, adyacentes, interactive = false }: LocationMapProps) {
+function LocationMapInner({ vertices, adyacentes, contexto, interactive = false }: LocationMapProps) {
   const [mounted, setMounted] = useState(false);
   const [L, setL] = useState<any>(null);
 
@@ -50,12 +51,21 @@ function LocationMapInner({ vertices, adyacentes, interactive = false }: Locatio
     [adyacentes]
   );
 
+  const contextoData = useMemo(() => {
+    if (!contexto?.vecinos) return [];
+    return contexto.vecinos.map(vecino => ({
+      latLngs: convertToLeaflet(vecino.vertices),
+      nombre: vecino.nombre
+    }));
+  }, [contexto]);
+
   const bounds = useMemo(() => {
     if (!L || mainLatLngs.length === 0) return null;
     const all = [...mainLatLngs];
     adyacentesData.forEach((ady: { latLngs: [number, number][], lote: string }) => all.push(...ady.latLngs));
+    contextoData.forEach((ctx: { latLngs: [number, number][] }) => all.push(...ctx.latLngs));
     return L.latLngBounds(all);
-  }, [L, mainLatLngs, adyacentesData]);
+  }, [L, mainLatLngs, adyacentesData, contextoData]);
 
   if (!mounted || !L || mainLatLngs.length < 3) {
     return (
@@ -93,6 +103,20 @@ function LocationMapInner({ vertices, adyacentes, interactive = false }: Locatio
           maxNativeZoom={19}
           maxZoom={24}
         />
+
+        {/* Contexto Vecindad */}
+        {contextoData.map((ctx, idx) => (
+          <Polygon 
+            key={`ctx-${idx}`}
+            positions={ctx.latLngs}
+            pathOptions={{ 
+              color: '#cbd5e1', 
+              weight: 0.5, 
+              fillColor: '#f8fafc',
+              fillOpacity: 0.2
+            }}
+          />
+        ))}
 
         {/* Lotes Adyacentes */}
         {adyacentesData.map((ady, idx) => (

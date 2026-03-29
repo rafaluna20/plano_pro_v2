@@ -160,31 +160,236 @@ const INITIAL_DATA: LoteData = {
   ],
   imagenGeneral:
     "https://ik.imagekit.io/m5f5k3axy/video_presentation.jpg?updatedAt=1741844704040",
-  logoUrl: "https://ik.imagekit.io/m5f5k3axy/LOGO_LAYA.png?updatedAt=1762278469920",
+  logoUrl:
+    "https://ik.imagekit.io/m5f5k3axy/LOGO_LAYA.png?updatedAt=1762278469920",
   contexto: {
     vecinos: [
       {
         id: "V1",
-        nombre: "Lote 13 (Izq)",
+        nombre: "Lote 14",
         codigo: "MZ-C-Lote13",
         estado: "libre",
         vertices: [
-          { id: "1", x: 284490.0, y: 8670100.0 },
-          { id: "2", x: 284500.0, y: 8670100.0 },
-          { id: "3", x: 284500.0, y: 8670080.0 },
-          { id: "4", x: 284490.0, y: 8670080.0 },
+          { id: "A", x: 284480.0, y: 8670120.0 },
+          { id: "B", x: 284500.0, y: 8670120.0 },
+          { id: "C", x: 284500.0, y: 8670100.0 },
+          { id: "D", x: 284480.0, y: 8670100.0 },
         ],
       },
       {
         id: "V2",
-        nombre: "Lote 15 (Der)",
-        codigo: "MZ-C-Lote15",
+        nombre: "Lote Norte 02",
+        codigo: "MZ-C-LoteN2",
         estado: "libre",
         vertices: [
-          { id: "1", x: 284510.0, y: 8670100.0 },
-          { id: "2", x: 284520.0, y: 8670100.0 },
-          { id: "3", x: 284520.0, y: 8670080.0 },
-          { id: "4", x: 284510.0, y: 8670080.0 },
+          { id: "A", x: 284500.0, y: 8670140.0 },
+          { id: "B", x: 284510.0, y: 8670140.0 },
+          { id: "C", x: 284510.0, y: 8670120.0 },
+          { id: "D", x: 284500.0, y: 8670120.0 },
+        ],
+      },
+      {
+        id: "V3",
+        nombre: "Lote Sur 02",
+        codigo: "MZ-C-LoteS2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284500.0, y: 8670060.0 },
+          { id: "B", x: 284510.0, y: 8670060.0 },
+          { id: "C", x: 284510.0, y: 8670040.0 },
+          { id: "D", x: 284500.0, y: 8670040.0 },
+        ],
+      },
+      {
+        id: "V4",
+        nombre: "Lote Este 02",
+        codigo: "MZ-C-LoteE2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284520.0, y: 8670100.0 },
+          { id: "B", x: 284530.0, y: 8670100.0 },
+          { id: "C", x: 284530.0, y: 8670080.0 },
+          { id: "D", x: 284520.0, y: 8670080.0 },
+        ],
+      },
+      {
+        id: "V5",
+        nombre: "Lote Oeste 02",
+        codigo: "MZ-C-LoteO2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284480.0, y: 8670100.0 },
+          { id: "B", x: 284490.0, y: 8670100.0 },
+          { id: "C", x: 284490.0, y: 8670080.0 },
+          { id: "D", x: 284480.0, y: 8670080.0 },
+        ],
+      },
+      {
+        id: "V6",
+        nombre: "Lote NE",
+        codigo: "MZ-C-LoteNE",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284510.0, y: 8670120.0 },
+          { id: "B", x: 284520.0, y: 8670120.0 },
+          { id: "C", x: 284520.0, y: 8670100.0 },
+          { id: "D", x: 284510.0, y: 8670100.0 },
+        ],
+      },
+      {
+        id: "V7",
+        nombre: "Lote NO",
+        codigo: "MZ-C-LoteNO",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284490.0, y: 8670120.0 },
+          { id: "B", x: 284500.0, y: 8670120.0 },
+          { id: "C", x: 284500.0, y: 8670100.0 },
+          { id: "D", x: 284490.0, y: 8670100.0 },
+        ],
+      },
+      {
+        id: "V8",
+        nombre: "Lote SE",
+        codigo: "MZ-C-LoteSE",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284510.0, y: 8670080.0 },
+          { id: "B", x: 284520.0, y: 8670080.0 },
+          { id: "C", x: 284520.0, y: 8670060.0 },
+          { id: "D", x: 284510.0, y: 8670060.0 },
+        ],
+      },
+      {
+        id: "V9",
+        nombre: "Lote SO",
+        codigo: "MZ-C-LoteSO",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284490.0, y: 8670080.0 },
+          { id: "B", x: 284500.0, y: 8670080.0 },
+          { id: "C", x: 284500.0, y: 8670060.0 },
+          { id: "D", x: 284490.0, y: 8670060.0 },
+        ],
+      },
+      {
+        id: "V10",
+        nombre: "Lote Norte 03",
+        codigo: "MZ-C-LoteN3",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284500.0, y: 8670160.0 },
+          { id: "B", x: 284510.0, y: 8670160.0 },
+          { id: "C", x: 284510.0, y: 8670140.0 },
+          { id: "D", x: 284500.0, y: 8670140.0 },
+        ],
+      },
+      {
+        id: "V11",
+        nombre: "Lote Sur 03",
+        codigo: "MZ-C-LoteS3",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284500.0, y: 8670040.0 },
+          { id: "B", x: 284510.0, y: 8670040.0 },
+          { id: "C", x: 284510.0, y: 8670020.0 },
+          { id: "D", x: 284500.0, y: 8670020.0 },
+        ],
+      },
+      {
+        id: "V12",
+        nombre: "Lote Este 03",
+        codigo: "MZ-C-LoteE3",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284530.0, y: 8670100.0 },
+          { id: "B", x: 284540.0, y: 8670100.0 },
+          { id: "C", x: 284540.0, y: 8670080.0 },
+          { id: "D", x: 284530.0, y: 8670080.0 },
+        ],
+      },
+      {
+        id: "V13",
+        nombre: "Lote Oeste 03",
+        codigo: "MZ-C-LoteO3",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284470.0, y: 8670100.0 },
+          { id: "B", x: 284480.0, y: 8670100.0 },
+          { id: "C", x: 284480.0, y: 8670080.0 },
+          { id: "D", x: 284470.0, y: 8670080.0 },
+        ],
+      },
+      {
+        id: "V14",
+        nombre: "Lote NE 02",
+        codigo: "MZ-C-LoteNE2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284520.0, y: 8670140.0 },
+          { id: "B", x: 284530.0, y: 8670140.0 },
+          { id: "C", x: 284530.0, y: 8670120.0 },
+          { id: "D", x: 284520.0, y: 8670120.0 },
+        ],
+      },
+      {
+        id: "V15",
+        nombre: "Lote NO 02",
+        codigo: "MZ-C-LoteNO2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284480.0, y: 8670140.0 },
+          { id: "B", x: 284490.0, y: 8670140.0 },
+          { id: "C", x: 284490.0, y: 8670120.0 },
+          { id: "D", x: 284480.0, y: 8670120.0 },
+        ],
+      },
+      {
+        id: "V16",
+        nombre: "Lote SE 02",
+        codigo: "MZ-C-LoteSE2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284520.0, y: 8670060.0 },
+          { id: "B", x: 284530.0, y: 8670060.0 },
+          { id: "C", x: 284530.0, y: 8670040.0 },
+          { id: "D", x: 284520.0, y: 8670040.0 },
+        ],
+      },
+      {
+        id: "V17",
+        nombre: "Lote SO 02",
+        codigo: "MZ-C-LoteSO2",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284480.0, y: 8670060.0 },
+          { id: "B", x: 284490.0, y: 8670060.0 },
+          { id: "C", x: 284490.0, y: 8670040.0 },
+          { id: "D", x: 284480.0, y: 8670040.0 },
+        ],
+      },
+      {
+        id: "V18",
+        nombre: "Lote EN",
+        codigo: "MZ-C-LoteEN",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284520.0, y: 8670120.0 },
+          { id: "B", x: 284530.0, y: 8670120.0 },
+          { id: "C", x: 284530.0, y: 8670100.0 },
+          { id: "D", x: 284520.0, y: 8670100.0 },
+        ],
+      },
+      {
+        id: "V19",
+        nombre: "Lote ON",
+        codigo: "MZ-C-LoteON",
+        estado: "libre",
+        vertices: [
+          { id: "A", x: 284470.0, y: 8670120.0 },
+          { id: "B", x: 284480.0, y: 8670120.0 },
+          { id: "C", x: 284480.0, y: 8670100.0 },
+          { id: "D", x: 284470.0, y: 8670100.0 },
         ],
       },
     ],
@@ -388,6 +593,7 @@ export default function EditorPlanos() {
 
   // Estados principales
   const [data, setData] = useState<LoteData>(INITIAL_DATA);
+  const [satelliteUrl, setSatelliteUrl] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "general" | "membrete" | "contexto" | "vertices"
@@ -833,6 +1039,41 @@ export default function EditorPlanos() {
         })
         .filter((item): item is NonNullable<typeof item> => item !== null);
 
+      const contextVecinos = (data.contexto?.vecinos || [])
+        .filter((vecino) => {
+          if (!vecino || !vecino.vertices) return false;
+          return vecino.vertices.some((v) => {
+            const dist = Math.sqrt(
+              Math.pow(v.x - centerRawX, 2) + Math.pow(v.y - centerRawY, 2)
+            );
+            return dist <= 20;
+          });
+        })
+        .map((vecino) => {
+          if (!vecino || !vecino.vertices) return null;
+          const pts = vecino.vertices.map((v) => toScreen(v.x, v.y));
+          const poly = pts.map((p) => `${p.x},${p.y}`).join(" ");
+
+          let cx = 0,
+            cy = 0;
+          pts.forEach((p) => {
+            cx += p.x;
+            cy += p.y;
+          });
+          if (pts.length > 0) {
+            cx /= pts.length;
+            cy /= pts.length;
+          }
+
+          return {
+            id: vecino.id,
+            nombre: vecino.nombre,
+            poly,
+            labelPos: { x: cx, y: cy },
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+
       return {
         layout: { width, height, rect2, rect3 },
         points,
@@ -840,6 +1081,7 @@ export default function EditorPlanos() {
         gridLines,
         technicalData,
         adyacentes,
+        contextVecinos,
         centerLabel: {
           x: centerX,
           y: centerY,
@@ -869,7 +1111,7 @@ export default function EditorPlanos() {
       console.error("Error calculando geometría:", e);
       return null;
     }
-  }, [data.vertices, data.lotesAdyacentes, zoom]);
+  }, [data.vertices, data.lotesAdyacentes, data.contexto, zoom]);
 
   // Handlers UI
   const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -1003,6 +1245,51 @@ export default function EditorPlanos() {
       ...prev,
       config: { ...prev.config, modoUbicacion: modo },
     }));
+  };
+
+  const handlePrintPDF = async () => {
+    if (data.vertices.length < 3) {
+      toast.error("Se requieren al menos 3 vértices para generar el PDF");
+      return;
+    }
+
+    setLoading(true);
+    let currentToast = toast.loading("Generando PDF (Nativo)...");
+
+    try {
+      const response = await fetch("/api/v1/planos/print", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": process.env.NEXT_PUBLIC_PDF_API_TOKEN || "yOuR_sUpEr_sEcReT_tOkEn_2024!",
+        },
+        body: JSON.stringify({
+          ...data,
+          satelliteUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const pdfBlob = await response.blob();
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `plano_nativa_${data.loteId}_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success("¡PDF generado exitosamente!", { id: currentToast });
+    } catch (error) {
+      console.error("❌ Error al imprimir PDF Nativo:", error);
+      toast.error("Error al conectar con el servidor", { id: currentToast });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGeneratePDF = async () => {
@@ -1146,7 +1433,9 @@ export default function EditorPlanos() {
                 type: "Polygon" as const,
                 coordinates: [
                   [
-                    ...vecino.vertices.map((v) => [v.x, v.y] as [number, number]),
+                    ...vecino.vertices.map(
+                      (v) => [v.x, v.y] as [number, number],
+                    ),
                     [vecino.vertices[0].x, vecino.vertices[0].y],
                   ],
                 ],
@@ -1154,7 +1443,10 @@ export default function EditorPlanos() {
             })),
             // Lotes adyacentes (N/S/E/O)
             ...Object.entries(data.lotesAdyacentes || {})
-              .filter(([, info]) => info && info.vertices && info.vertices.length >= 3)
+              .filter(
+                ([, info]) =>
+                  info && info.vertices && info.vertices.length >= 3,
+              )
               .map(([key, info]) => ({
                 type: "Feature" as const,
                 properties: {
@@ -1166,7 +1458,9 @@ export default function EditorPlanos() {
                   type: "Polygon" as const,
                   coordinates: [
                     [
-                      ...info!.vertices.map((v) => [v.x, v.y] as [number, number]),
+                      ...info!.vertices.map(
+                        (v) => [v.x, v.y] as [number, number],
+                      ),
                       [info!.vertices[0].x, info!.vertices[0].y],
                     ],
                   ],
@@ -1305,6 +1599,14 @@ export default function EditorPlanos() {
                   <FileText size={16} /> viewPDF
                 </>
               )}
+            </button>
+            <button
+              onClick={handlePrintPDF}
+              disabled={loading}
+              className="px-6 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <Download size={18} className="text-blue-600" />
+              Impresión API
             </button>
             <button
               onClick={handleGeneratePDF}
@@ -1578,7 +1880,10 @@ export default function EditorPlanos() {
                         placeholder="https://ejemplo.com/logo.png"
                         value={data.logoUrl}
                         onChange={(e) =>
-                          setData((prev) => ({ ...prev, logoUrl: e.target.value }))
+                          setData((prev) => ({
+                            ...prev,
+                            logoUrl: e.target.value,
+                          }))
                         }
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm"
                       />
@@ -1889,6 +2194,8 @@ export default function EditorPlanos() {
                         previewData?.leaflet.polygon as Array<[number, number]>
                       }
                       adyacentes={previewData?.adyacentes}
+                      contexto={data.contexto}
+                      onSatelliteLoaded={setSatelliteUrl}
                     />
                   </div>
                 ) : data.config.modoUbicacion === "imagen" &&
@@ -2125,6 +2432,28 @@ export default function EditorPlanos() {
                         </text>
                       </g>
 
+                      {/* CONTEXTO VECINDAD */}
+                      {previewData.contextVecinos?.map((vecino, idx) => (
+                        <g key={`ctx-${idx}`} style={{ pointerEvents: "none" }}>
+                          <polygon
+                            points={vecino.poly}
+                            fill="none"
+                            stroke="#e2e8f0"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x={vecino.labelPos.x}
+                            y={vecino.labelPos.y}
+                            textAnchor="middle"
+                            fontSize="7"
+                            fill="#94a3b8"
+                            fontWeight="bold"
+                          >
+                            {vecino.nombre}
+                          </text>
+                        </g>
+                      ))}
+
                       {/* LOTES ADYACENTES */}
                       {previewData.adyacentes.map((ady, idx) => {
                         if (!ady) return null;
@@ -2344,6 +2673,7 @@ export default function EditorPlanos() {
                               vertices: a.vertices,
                               lote: a.lote,
                             }))}
+                          contexto={data.contexto}
                           interactive={false}
                         />
                       </foreignObject>
@@ -2729,6 +3059,7 @@ export default function EditorPlanos() {
                 adyacentes={Object.values(data.lotesAdyacentes || {})
                   .filter((a): a is NonNullable<typeof a> => a !== null)
                   .map((a) => ({ vertices: a.vertices, lote: a.lote }))}
+                contexto={data.contexto}
                 interactive={true}
               />
             </div>

@@ -30,6 +30,8 @@ interface PDFViewerWrapperProps {
   logoUrl?: string;
   latLngs?: Array<[number, number]>;
   adyacentes?: Array<{ id: string; lote: string; leafletPolygon: Array<[number, number]>; vertices: Array<{ id: string; x: number; y: number }> }>;
+  contexto?: { vecinos: Array<{ id: string; nombre: string; vertices: Array<{ id: string; x: number; y: number }> }> };
+  onSatelliteLoaded?: (url: string) => void;
 }
 
 export function PDFViewerWrapper({
@@ -41,7 +43,9 @@ export function PDFViewerWrapper({
   imagenGeneral,
   logoUrl,
   latLngs,
-  adyacentes
+  adyacentes,
+  contexto,
+  onSatelliteLoaded
 }: PDFViewerWrapperProps) {
   const [mounted, setMounted] = useState(false);
   const [satelliteUrl, setSatelliteUrl] = useState<string>('');
@@ -59,6 +63,9 @@ export function PDFViewerWrapper({
           const adjPolys = adyacentes?.map(a => a.leafletPolygon);
           const url = await MapService.getStaticMapWithPolygon(latLngs, 250, 250, 17, 2, 'satellite', adjPolys);
           setSatelliteUrl(url);
+          if (onSatelliteLoaded) {
+            onSatelliteLoaded(url);
+          }
         } catch (error) {
           console.error("Failed to fetch satellite image:", error);
         } finally {
@@ -93,6 +100,7 @@ export function PDFViewerWrapper({
         satelliteUrl={satelliteUrl}
         logoUrl={logoUrl}
         lotesAdyacentes={adyacentes?.map(a => ({ id: a.lote, vertices: a.vertices }))}
+        contexto={contexto}
       />
     </PDFViewer>
   );
