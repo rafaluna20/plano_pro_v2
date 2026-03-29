@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           loteCodigo: payload.lote.codigo,
           fechaGeneracion: new Date().toISOString(),
+          documentosIncluidos: ['MEMORIA_DESCRIPTIVA', 'PLANO_PERIMETRICO', 'PLANO_UBICACION'],
           mensaje: 'Generación iniciada. Use el endpoint de estado para verificar progreso.',
           estrategiaContexto: payload.contexto?.elementos?.length ? 'VECTORIAL' : (payload.imagenContexto ? 'IMAGEN' : 'MAPA_SERVER')
         }

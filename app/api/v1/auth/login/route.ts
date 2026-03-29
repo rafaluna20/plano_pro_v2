@@ -37,14 +37,14 @@ export async function POST(request: NextRequest) {
       include: {
         apiKeys: {
           where: {
-            revocado: false,
+            isActive: true,
             OR: [
-              { expiraEn: null },
-              { expiraEn: { gt: new Date() } }
+              { expiresAt: null },
+              { expiresAt: { gt: new Date() } }
             ]
           },
           orderBy: {
-            creadoEn: 'desc'
+            createdAt: 'desc'
           },
           take: 1
         }

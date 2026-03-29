@@ -1,5 +1,5 @@
 import { planosQueue } from './client';
-import { GenerarPlanosRequest, UTMCoordinate, Dimensiones, LoteMetadata, Colindancia, PlanoConfig } from '@/types/planos';
+import { GenerarPlanosRequest, UTMCoordinate, Dimensiones, LoteMetadata, Colindancia, PlanoConfig, Propietario } from '@/types/planos';
 
 export interface PlanoJobData {
   planoId: string;
@@ -12,7 +12,15 @@ export interface GenerarPlanoJob {
   dimensiones: Dimensiones;
   lote: LoteMetadata;
   colindancias: Colindancia[];
-  config: PlanoConfig;
+  propietario?: Propietario;
+  contexto?: any;
+  imagenContexto?: any;
+  config: PlanoConfig & {
+    incluirMemoriaDescriptiva: boolean;
+    incluirPlanoPerimetrico: boolean;
+    incluirPlanoUbicacion: boolean;
+    incluirColindantesEnPlano: boolean;
+  };
   userId: string;
 }
 

@@ -2,10 +2,11 @@
 export type UTMCoordinate = [number, number];
 
 export interface Colindancia {
-  lado: 'norte' | 'sur' | 'este' | 'oeste' | 'frente' | 'fondo' | 'derecha' | 'izquierda';
+  lado: 'norte' | 'sur' | 'este' | 'oeste' | 'frente' | 'fondo' | 'derecha' | 'izquierda' | 'NORTE' | 'SUR' | 'ESTE' | 'OESTE' | 'FRENTE' | 'FONDO' | 'DERECHA' | 'IZQUIERDA';
   tipo: 'lote' | 'calle' | 'area_verde' | 'area_comun';
   nombre: string;
-  propietario?: string;
+  propietario?: string | null;
+  longitud?: number | null;
   coordinates?: UTMCoordinate[];
 }
 
@@ -20,11 +21,11 @@ export interface Dimensiones {
 
 export interface Propietario {
   nombre: string;
-  dni?: string;
-  ruc?: string;
-  direccion?: string;
-  telefono?: string;
-  email?: string;
+  dni?: string | null;
+  ruc?: string | null;
+  direccion?: string | null;
+  telefono?: string | null;
+  email?: string | null;
 }
 
 export interface LoteMetadata {
@@ -86,7 +87,7 @@ export interface GenerarPlanosRequest {
     }>;
     radioBusqueda?: number;
     elementos?: Array<{
-      tipo: string;
+      tipo?: string;
       codigo: string;
       texto?: string;
       estado: string;
@@ -113,6 +114,8 @@ export interface GenerarPlanosResponse {
       documentosIncluidos: string[];
       tamanoPDF?: number;
       numeroPaginas?: number;
+      mensaje?: string;
+      estrategiaContexto?: string;
     };
   };
   error?: {
