@@ -11,7 +11,7 @@ import {
   G,
   Rect,
 } from "@react-pdf/renderer";
-import DrawingVectorial from "./DrawingVectorial";
+import DrawingVectorial, { decimalToDMSShort } from "./DrawingVectorial";
 import DrawingSatelital from "./DrawingSatelital";
 import DrawingImagen from "./DrawingImagen";
 
@@ -193,6 +193,16 @@ export const PlanoDocument = ({
     };
   });
 
+  const totalDist = datosTecnicos.reduce((acc, row) => {
+    const val = parseFloat(row.dist);
+    return acc + (isNaN(val) ? 0 : val);
+  }, 0);
+
+  const totalAng = datosTecnicos.reduce(
+    (acc, row) => acc + (row.angValue || 0),
+    0,
+  );
+
   return (
     <Document>
       <Page size="A3" orientation="landscape" style={styles.page}>
@@ -272,11 +282,12 @@ export const PlanoDocument = ({
                       vertices={vertices}
                       lotesAdyacentes={lotesAdyacentes}
                       contexto={contexto}
+                      escala={escala}
                     />
                   </View>
                 )}
               </View>
-              <View
+              {/* <View
                 style={{
                   borderTop: "0.5pt solid #000",
                   width: "100%",
@@ -286,7 +297,7 @@ export const PlanoDocument = ({
                 <Text style={{ fontSize: 5, textAlign: "center" }}>
                   SIN ESCALA
                 </Text>
-              </View>
+              </View> */}
             </View>
 
             <View style={[styles.sectionBox, { flex: 1 }]}>
@@ -345,6 +356,42 @@ export const PlanoDocument = ({
                     </Text>
                   </View>
                 ))}
+                <View style={[styles.tableRow, { backgroundColor: "#e0e0e0" }]}>
+                  <Text
+                    style={[
+                      styles.tableCell,
+                      { width: "25%", fontWeight: "bold" },
+                    ]}
+                  >
+                    TOTAL
+                  </Text>
+
+                  <Text style={[styles.tableCell, { width: "15%" }]} />
+
+                  <Text
+                    style={[
+                      styles.tableCell,
+                      { width: "15%", fontWeight: "bold" },
+                    ]}
+                  >
+                    {totalDist.toFixed(2)}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.tableCell,
+                      { width: "20%", fontWeight: "bold" },
+                    ]}
+                  >
+                    {decimalToDMSShort(totalAng)}
+                  </Text>
+
+                  <Text style={[styles.tableCell, { width: "20%" }]} />
+
+                  <Text
+                    style={[styles.tableCell, { width: "20%", borderRight: 0 }]}
+                  />
+                </View>
               </View>
 
               <View
@@ -354,7 +401,7 @@ export const PlanoDocument = ({
                   ÁREA: {area.toFixed(2)} m²
                 </Text>
                 <Text style={{ fontSize: 6, fontWeight: "bold" }}>
-                  PERÍMETRO: {perimetro.toFixed(2)} ml
+                  PERÍMETRO: {perimetro.toFixed(2)} m
                 </Text>
               </View>
             </View>
@@ -475,10 +522,12 @@ const LocationSketchMini = ({
   vertices,
   lotesAdyacentes,
   contexto,
+  escala,
 }: {
   vertices: Point[];
   lotesAdyacentes: any[];
   contexto?: any;
+  escala: string;
 }) => {
   const W = 240;
   const MAP_H = 80;
@@ -533,6 +582,15 @@ const LocationSketchMini = ({
 
   const cX = toPaper(mainCx, mainCy).x;
   const cY = toPaper(mainCx, mainCy).y;
+  const mainWidth =
+    (Math.max(...vertices.map((v) => v.x)) -
+      Math.min(...vertices.map((v) => v.x))) *
+    scale;
+  const mainHeight =
+    (Math.max(...vertices.map((v) => v.y)) -
+      Math.min(...vertices.map((v) => v.y))) *
+    scale;
+  const radius = Math.sqrt(mainWidth ** 2 + mainHeight ** 2) / 2;
 
   return (
     <View style={{ width: W, height: SVG_H, position: "relative" }}>
@@ -602,17 +660,11 @@ const LocationSketchMini = ({
             const adyCentroid = toPaper(adyCx, adyCy);
             return (
               <G key={`ady-${idx}`}>
-                <Path
-                  d={d}
-                  fill="none"
-                  stroke="#ccc"
-                  strokeWidth={0.5}
-                  strokeDasharray="2,2"
-                />
+                <Path d={d} fill="none" stroke="#e2e8f0" strokeWidth={0.5} />
                 <Text
                   x={adyCentroid.x}
                   y={adyCentroid.y}
-                  style={{ fontSize: 1, fill: "#666" }}
+                  style={{ fontSize: 1, fill: "#999" }}
                   textAnchor="middle"
                 >
                   {lote.id}
@@ -624,7 +676,7 @@ const LocationSketchMini = ({
           <Circle
             cx={cX}
             cy={cY}
-            r={9}
+            r={radius}
             fill="none"
             stroke="#000"
             strokeWidth={1}
@@ -658,7 +710,7 @@ const LocationSketchMini = ({
           style={{ fontSize: 5 }}
           textAnchor="middle"
         >
-          ESC:1/15,000
+          ESC:{escala}
         </Text>
       </Svg>
     </View>

@@ -42,7 +42,7 @@ interface Props {
 const dist = (p1: Point, p2: Point) =>
   Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 
-const decimalToDMSShort = (decimal: number) => {
+export const decimalToDMSShort = (decimal: number) => {
   const d = Math.floor(decimal);
   const m = Math.floor((decimal - d) * 60);
   return `${d}°${m.toString().padStart(2, "0")}'`;
@@ -56,8 +56,8 @@ export const DrawingVectorial = ({
   lotesAdyacentes = [],
   contexto,
 }: Props) => {
-  const VIEWPORT_W = 530;
-  const VIEWPORT_H = 500;
+  const VIEWPORT_W = 850;
+  const VIEWPORT_H = 700;
 
   let allPoints = [...vertices];
   lotesAdyacentes.forEach((lote) => {
@@ -73,8 +73,6 @@ export const DrawingVectorial = ({
       (v) => dist(v, { x: mainCx, y: mainCy, id: "" }) <= 60,
     );
   });
-
-  console.log("validContextVecinos", validContextVecinos);
 
   validContextVecinos.forEach((vecino) => {
     allPoints = allPoints.concat(vecino.vertices);
@@ -167,6 +165,14 @@ export const DrawingVectorial = ({
     return `M ${startX} ${startY} A ${radius} ${radius} 0 0 ${sweepFlag} ${endX} ${endY}`;
   };
 
+  const xsMain = vertices.map((v) => v.x);
+  const minXMain = Math.min(...xsMain);
+  const maxXMain = Math.max(...xsMain);
+
+  const anchoMaximo = maxXMain - minXMain;
+  const mainWidthPaper = anchoMaximo * scale * 0.6;
+  const labelHeight = 10;
+
   return (
     <View
       style={{
@@ -178,34 +184,39 @@ export const DrawingVectorial = ({
     >
       <Svg width={VIEWPORT_W} height={VIEWPORT_H}>
         {/* Grillas y Cruces */}
-        {gridLinesX.map((x) =>
-          gridLinesY.map((y) => {
-            const p = toPaper(x, y);
-            if (p.x > 0 && p.x < VIEWPORT_W && p.y > 0 && p.y < VIEWPORT_H) {
-              return (
-                <G key={`${x}-${y}`}>
-                  <Line
-                    x1={p.x - 4}
-                    y1={p.y}
-                    x2={p.x + 4}
-                    y2={p.y}
-                    stroke="#666"
-                    strokeWidth={0.5}
-                  />
-                  <Line
-                    x1={p.x}
-                    y1={p.y - 4}
-                    x2={p.x}
-                    y2={p.y + 4}
-                    stroke="#666"
-                    strokeWidth={0.5}
-                  />
-                </G>
-              );
-            }
-            return null;
-          }),
-        )}
+        {/* Grilla completa vertical */}
+        {gridLinesX.map((x) => {
+          const pTop = toPaper(x, minY);
+
+          return (
+            <Line
+              key={`vx-${x}`}
+              x1={pTop.x}
+              y1={0}
+              x2={pTop.x}
+              y2={VIEWPORT_H - 12}
+              stroke="#f0f0f0"
+              strokeWidth={0.2}
+            />
+          );
+        })}
+
+        {/* Grilla completa horizontal */}
+        {gridLinesY.map((y) => {
+          const pLeft = toPaper(minX, y);
+
+          return (
+            <Line
+              key={`hy-${y}`}
+              x1={35}
+              y1={pLeft.y}
+              x2={VIEWPORT_W}
+              y2={pLeft.y}
+              stroke="#f0f0f0"
+              strokeWidth={0.2}
+            />
+          );
+        })}
 
         {/* Etiquetas Grilla */}
         {gridLinesX.map((x, i) => {
@@ -262,13 +273,13 @@ export const DrawingVectorial = ({
               <Path
                 d={pathDataContext}
                 fill="none"
-                stroke="#d1d5db"
-                strokeWidth={1}
+                stroke="#e5e7eb"
+                strokeWidth={0.3}
               />
               <Text
                 x={ctxCentroid.x}
                 y={ctxCentroid.y}
-                style={{ fontSize: 6, fill: "#666" }}
+                style={{ fontSize: 4, fill: "#666" }}
                 textAnchor="middle"
               >
                 {vecino.nombre}
@@ -300,14 +311,13 @@ export const DrawingVectorial = ({
               <Path
                 d={pathDataAdyacente}
                 fill="none"
-                stroke="#999"
-                strokeWidth={1}
-                strokeDasharray="4,4"
+                stroke="#e5e7eb"
+                strokeWidth={0.3}
               />
               <Text
                 x={centroid.x}
                 y={centroid.y}
-                style={{ fontSize: 6, fill: "#666" }}
+                style={{ fontSize: 4, fill: "#666" }}
                 textAnchor="middle"
               >
                 {lote.id}
@@ -320,23 +330,31 @@ export const DrawingVectorial = ({
         <Path d={pathData} fill="#eeeeee" stroke="#000" strokeWidth={1.5} />
 
         {/* Etiqueta Central Área/Perímetro */}
-        {/* <G>
-          <Rect 
-            x={centroid.x - 50} 
-            y={centroid.y - 10} 
-            width={100} 
-            height={20} 
-            fill="white" 
-            stroke="#000" 
-            strokeWidth={0.5} 
+        <G>
+          <Rect
+            x={centroid.x - mainWidthPaper / 2 + 1}
+            y={centroid.y - 6}
+            width={mainWidthPaper}
+            height={labelHeight}
+            fill="white"
+            stroke="#000"
+            strokeWidth={0.2}
           />
-          <Text x={centroid.x} y={centroid.y - 2} style={{ fontSize: 5, fontWeight: 'bold' }} textAnchor="middle">
-            ÁREA = {area.toFixed(2)} m²
+          <Text
+            x={centroid.x - 6}
+            y={centroid.y - 2}
+            style={{ fontSize: 1.6, fontWeight: "bold" }}
+          >
+            ÁREA={area.toFixed(2)}m²
           </Text>
-          <Text x={centroid.x} y={centroid.y + 5} style={{ fontSize: 5, fontWeight: 'bold' }} textAnchor="middle">
-            PERÍMETRO = {perimetro.toFixed(2)} ml
+          <Text
+            x={centroid.x - 7.5}
+            y={centroid.y + 2}
+            style={{ fontSize: 1.6, fontWeight: "bold" }}
+          >
+            PERÍMETRO={perimetro.toFixed(2)}m
           </Text>
-        </G> */}
+        </G>
 
         {/* Vértices y Ángulos */}
         {vertices.map((v, i) => {
@@ -350,7 +368,18 @@ export const DrawingVectorial = ({
           const distVal = dist(v, nextV).toFixed(2);
 
           const anguloVal = datosTecnicos[i].angValue;
-          const arcPath = getAngleArc(prevV, v, nextV, 20);
+          const arcPath = getAngleArc(prevV, v, nextV, 7);
+
+          const maxY = Math.max(...vertices.map((v) => v.y));
+          const maxX = Math.max(...vertices.map((v) => v.x));
+
+          const topVertices = vertices.filter((v) => v.y === maxY);
+          const rightVertices = vertices.filter((v) => v.x === maxX);
+
+          const isTopVertex = topVertices.includes(v);
+          const isRightVertex = rightVertices.includes(v);
+          const paddingTop = isTopVertex ? 10 : -8;
+          const paddingRight = isRightVertex ? -8 : 3;
 
           return (
             <G key={`v-${i}`}>
@@ -363,9 +392,9 @@ export const DrawingVectorial = ({
                 fill="none"
               />
               <Text
-                x={p.x + 15}
-                y={p.y - 10}
-                style={{ fontSize: 5, fill: "#666" }}
+                x={p.x + paddingRight}
+                y={p.y + paddingTop}
+                style={{ fontSize: 2, fill: "#666" }}
               >
                 {decimalToDMSShort(anguloVal)}
               </Text>
@@ -382,25 +411,20 @@ export const DrawingVectorial = ({
               <Text
                 x={p.x + 3}
                 y={p.y - 3}
-                style={{ fontSize: 6, fontWeight: "bold" }}
+                style={{ fontSize: 3, fontWeight: "bold" }}
               >
                 {v.id}
               </Text>
 
               {/* Distancia Lado */}
               <Rect
-                x={midX - 10}
-                y={midY - 4}
-                width={20}
-                height={8}
+                x={midX - 3.7}
+                y={midY - 3}
+                width={9}
+                height={4}
                 fill="white"
               />
-              <Text
-                x={midX}
-                y={midY}
-                style={{ fontSize: 5 }}
-                textAnchor="middle"
-              >
+              <Text x={midX - 3} y={midY} style={{ fontSize: 2 }}>
                 {distVal}m
               </Text>
             </G>
@@ -408,10 +432,33 @@ export const DrawingVectorial = ({
         })}
 
         {/* Norte */}
-        <G transform={`translate(${VIEWPORT_W - 50}, 50)`}>
-          <Line x1={0} y1={-20} x2={0} y2={20} stroke="black" strokeWidth={1} />
-          <Path d="M 0 -20 L -3 -10 L 3 -10 Z" fill="black" />
-          <Text x={-3} y={-25} style={{ fontSize: 10, fontWeight: "bold" }}>
+        <G transform={`translate(${VIEWPORT_W - 50}, 60)`}>
+          {/* Triángulo superior */}
+          <Path
+            d="M 0 -30 L -8 0 L 8 0 Z"
+            fill="black"
+            strokeWidth={1}
+            stroke="black"
+          />
+
+          {/* Triángulo inferior */}
+          <Path
+            d="M 0 30 L -8 0 L 8 0 Z"
+            fill="white"
+            stroke="black"
+            strokeWidth={1}
+          />
+
+          {/* Eje central (dibujado al final para que se vea) */}
+          <Line x1={0} y1={-30} x2={0} y2={30} stroke="black" strokeWidth={1} />
+
+          {/* Letra N */}
+          <Text
+            x={0}
+            y={-38}
+            style={{ fontSize: 12, fontWeight: "bold" }}
+            textAnchor="middle"
+          >
             N
           </Text>
         </G>
