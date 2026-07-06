@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+# El postinstall script corre "prisma generate", que necesita el schema
+# presente ANTES de npm ci (si no, falla con "Could not find Prisma Schema").
+COPY prisma ./prisma
 RUN npm ci
 
 COPY . .
-
-RUN npx prisma generate
 
 CMD ["npm", "run", "worker"]
