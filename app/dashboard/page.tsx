@@ -282,7 +282,7 @@ export default function DashboardPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex justify-end gap-3">
                             <button
-                              onClick={() => router.push('/editor/cmkvg28by000m13i65ajecf02')}
+                              onClick={() => router.push(`/editor/${plano.id}`)}
                               className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
                               title="Ver editor"
                             >

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/client';
+import { redis } from '@/lib/redis/client';
 import { HealthCheckResponse } from '@/types/api';
 
 export async function GET() {
@@ -22,12 +23,18 @@ export async function GET() {
     services.database = 'error';
   }
 
-  // Check Redis (opcional)
-  // try {
-  //   await redis.ping();
-  // } catch (error) {
-  //   services.redis = 'error';
-  // }
+  // Check Redis: con timeout corto propio, porque el cliente ioredis está
+  // configurado con maxRetriesPerRequest:null (reintenta indefinidamente) y
+  // sin esto un Redis inalcanzable colgaría el health check en vez de
+  // reportar error rápido.
+  try {
+    await Promise.race([
+      redis.ping(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Redis ping timeout')), 3000)),
+    ]);
+  } catch (error) {
+    services.redis = 'error';
+  }
 
   const status: 'ok' | 'degraded' | 'error' = Object.values(services).includes('error') ? 'error' : 'ok';
   

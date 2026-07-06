@@ -37,14 +37,14 @@ export async function POST(request: NextRequest) {
       include: {
         apiKeys: {
           where: {
-            revocado: false,
+            isActive: true,
             OR: [
-              { expiraEn: null },
-              { expiraEn: { gt: new Date() } }
+              { expiresAt: null },
+              { expiresAt: { gt: new Date() } }
             ]
           },
           orderBy: {
-            creadoEn: 'desc'
+            createdAt: 'desc'
           },
           take: 1
         }
@@ -102,7 +102,11 @@ export async function POST(request: NextRequest) {
             createdAt: user.createdAt
           },
           token,
-          apiKey: apiKey?.key || null
+          // apiKey.key en BD es un hash bcrypt, no la key en texto plano:
+          // el valor real solo se conoce una vez, al crearla (ver /auth/register).
+          // No se puede devolver aquí; el cliente debe conservar la key emitida
+          // en el registro o generar una nueva vía el endpoint de API keys.
+          apiKey: null
         },
         message: 'Login exitoso'
       },

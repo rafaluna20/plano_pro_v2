@@ -1,37 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/client';
-import { validateApiKey } from '@/lib/auth/api-keys';
+import { authenticateApiRequest } from '@/lib/auth/apiAuth';
 import { generarPlanosSchema } from '@/lib/validators/apiSchemas';
 import { queuePlanoGeneration } from '@/lib/queue/jobs';
 import { GenerarPlanosRequest, GenerarPlanosResponse } from '@/types/planos';
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  
-  try { 
-    // 1. AUTENTICACIÓN
-    // Validamos que la solicitud venga de tu AppTerralima o fuente confiable
-    const apiKey = request.headers.get('x-api-key');
-    if (!apiKey) {
-      return NextResponse.json<GenerarPlanosResponse>({
-        success: false,
-        error: {
-          code: 'MISSING_API_KEY',
-          message: 'API key requerida en header X-API-Key'
-        }
-      }, { status: 401 });
-    }
 
-    const apiKeyRecord = await validateApiKey(apiKey);
-    if (!apiKeyRecord) {
-      return NextResponse.json<GenerarPlanosResponse>({
-        success: false,
-        error: {
-          code: 'INVALID_API_KEY',
-          message: 'API key inválida o expirada'
-        }
-      }, { status: 401 });
-    }
+  try {
+    // 1. AUTENTICACIÓN + RATE LIMITING
+    const auth = await authenticateApiRequest(request);
+    if (!auth.ok) return auth.response;
+    const { apiKeyRecord } = auth;
 
     // 2. PARSEO Y VALIDACIÓN DEL PAYLOAD
     // Se espera que el JSON cumpla con la estructura nueva (vectores, imagen, colindancias separadas)

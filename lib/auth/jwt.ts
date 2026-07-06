@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
+import { env } from '@/lib/utils/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_SECRET = env.JWT_SECRET;
 const JWT_EXPIRES_IN = '7d'; // 7 días
 
 export interface JWTPayload {

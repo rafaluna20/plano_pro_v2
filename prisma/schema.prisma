@@ -42,10 +42,11 @@ enum UserRole {
 
 model ApiKey {
   id            String    @id @default(cuid())
-  key           String    @unique  // Hash de la API Key real
+  key           String    @unique  // Hash bcrypt de la API Key real (legacy, solo para verificación)
+  keyHash       String?   @unique  // Hash SHA-256 de la API Key real, usado para lookup O(1)
   name          String               // Nombre descriptivo (ej: "App Terralima Producción")
   prefix        String               // Primeros caracteres visibles para identificarla
-  
+
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
@@ -96,6 +97,8 @@ model Plano {
   // --- Archivos Resultantes ---
   pdfUrl        String?              // URL pública/privada del PDF generado en S3/Blob
   pdfSize       Int?                 // Tamaño en bytes
+  dxfUrl        String?              // URL del archivo DXF (CAD) generado por el servicio Python
+  dxfSize       Int?                 // Tamaño del DXF en bytes
   thumbnailUrl  String?              // Imagen previa del plano
   
   // --- Estado del Proceso (Job Queue) ---

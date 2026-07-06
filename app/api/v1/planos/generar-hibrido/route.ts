@@ -15,13 +15,15 @@ import { jsPDF } from 'jspdf';
 import type { PlanoPayloadHibrido } from '@/types/PlanosPayload';
 import { PlanoDataProcessor } from '@/lib/services/PlanoDataProcessor';
 import { PlanoPerimetricoGeneratorV2 } from '@/lib/generators/PlanoPerimetricoGeneratorV2';
+import { verifyToken, extractTokenFromHeader } from '@/lib/auth/jwt';
+import { validateApiKey } from '@/lib/auth/api-keys';
 
 // =============================================================================
 // CONFIGURACIÓN
 // =============================================================================
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 120; // Aumentado para PDFs complejos con muchos vecinos
 
 // =============================================================================
 // TIPOS DE RESPUESTA
@@ -57,10 +59,68 @@ interface SuccessMetadata {
 // HANDLER PRINCIPAL
 // =============================================================================
 
+// =============================================================================
+// HELPER: Verificar autenticación (JWT Bearer o x-api-key)
+// =============================================================================
+
+async function checkAuth(request: NextRequest): Promise<boolean> {
+  // Opción 1: Bearer JWT en el header Authorization
+  const authHeader = request.headers.get('authorization');
+  if (authHeader) {
+    try {
+      const token = extractTokenFromHeader(authHeader);
+      if (token) {
+        verifyToken(token);
+        return true;
+      }
+    } catch {
+      // Token inválido, intentar con API key
+    }
+  }
+
+  // Opción 2: x-api-key header
+  const rawApiKey = request.headers.get('x-api-key');
+  if (rawApiKey) {
+    try {
+      const apiKeyRecord = await validateApiKey(rawApiKey);
+      return apiKeyRecord !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  // Opción 3: Modo desarrollo - permitir si SKIP_AUTH_DEV_ONLY está activado.
+  // Sin prefijo NEXT_PUBLIC_ (no debe inlinearse en el bundle del cliente) y
+  // con guarda explícita de NODE_ENV: aunque esta variable quede seteada por
+  // error en la config de un entorno productivo, el bypass no puede activarse.
+  if (process.env.NODE_ENV !== 'production' && process.env.SKIP_AUTH_DEV_ONLY === 'true') {
+    return true;
+  }
+
+  return false;
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // =========================================================================
+    // 0. AUTENTICACIÓN
+    // =========================================================================
+    const isAuthenticated = await checkAuth(request);
+    if (!isAuthenticated) {
+      return NextResponse.json<ErrorResponse>(
+        {
+          success: false,
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Se requiere autenticación. Proporciona un Bearer token o x-api-key válido.',
+          },
+        },
+        { status: 401 }
+      );
+    }
+
     // =========================================================================
     // 1. PARSEO Y VALIDACIÓN BÁSICA
     // =========================================================================

@@ -1,7 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { MemoriaDescriptivaGenerator } from './MemoriaDescriptiva';
-import { PlanoPerimetricoGenerator } from './PlanoPerimetrico'; // Mantener como fallback o eliminar si estamos seguros
 import { PlanoPerimetricoGeneratorV2 } from './PlanoPerimetricoGeneratorV2';
 import { PlanoUbicacionGenerator } from './PlanoUbicacion';
 import { PlanoRequestAdapter } from './PlanoRequestAdapter';

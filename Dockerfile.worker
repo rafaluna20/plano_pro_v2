@@ -1,0 +1,24 @@
+FROM node:20-bookworm-slim
+
+# canvas necesita estas librerías nativas del sistema para compilar en npm install
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    openssl \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+RUN npx prisma generate
+
+CMD ["npm", "run", "worker"]

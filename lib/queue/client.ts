@@ -1,15 +1,11 @@
-import { Queue, Worker, Job } from 'bullmq';
-import IORedis from 'ioredis';
-import { env } from '@/lib/utils/env';
-
-// Conexión Redis
-const connection = new IORedis(env.REDIS_URL, {
-  maxRetriesPerRequest: null,
-});
+import { Queue } from 'bullmq';
+import { redis as connection } from '@/lib/redis/client';
 
 // Cola de generación de planos
+// Prefix propio para no colisionar con otras apps que compartan esta instancia de Redis
 export const planosQueue = new Queue('planos-generation', {
   connection,
+  prefix: 'planospro',
   defaultJobOptions: {
     attempts: 3,
     backoff: {

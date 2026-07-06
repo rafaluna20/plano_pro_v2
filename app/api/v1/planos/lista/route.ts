@@ -1,33 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/client';
-import { validateApiKey } from '@/lib/auth/api-keys';
+import { authenticateApiRequest } from '@/lib/auth/apiAuth';
 import { listPlanosQuerySchema } from '@/lib/validators/apiSchemas';
 import { ApiResponse } from '@/types/api';
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. Autenticación
-    const apiKey = request.headers.get('x-api-key');
-    if (!apiKey) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: {
-          code: 'MISSING_API_KEY',
-          message: 'API key requerida en header X-API-Key'
-        }
-      }, { status: 401 });
-    }
-
-    const apiKeyRecord = await validateApiKey(apiKey);
-    if (!apiKeyRecord) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: {
-          code: 'INVALID_API_KEY',
-          message: 'API key inválida o expirada'
-        }
-      }, { status: 401 });
-    }
+    // 1. Autenticación + rate limiting
+    const auth = await authenticateApiRequest(request);
+    if (!auth.ok) return auth.response;
+    const { apiKeyRecord } = auth;
 
     // 2. Parsear query params
     const { searchParams } = new URL(request.url);

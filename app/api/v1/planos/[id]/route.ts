@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/client';
+import { authenticateApiRequest } from '@/lib/auth/apiAuth';
 import { validateApiKey } from '@/lib/auth/api-keys';
+import { checkRateLimit } from '@/lib/auth/rateLimit';
 import { ApiResponse } from '@/types/api';
 
 export async function GET(
@@ -10,29 +12,11 @@ export async function GET(
   try {
     // Await params en Next.js 15+
     const { id } = await params;
-    
-    // 1. Autenticación
-    const apiKey = request.headers.get('x-api-key');
-    if (!apiKey) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: {
-          code: 'MISSING_API_KEY',
-          message: 'API key requerida en header X-API-Key'
-        }
-      }, { status: 401 });
-    }
 
-    const apiKeyRecord = await validateApiKey(apiKey);
-    if (!apiKeyRecord) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: {
-          code: 'INVALID_API_KEY',
-          message: 'API key inválida o expirada'
-        }
-      }, { status: 401 });
-    }
+    // 1. Autenticación + rate limiting
+    const auth = await authenticateApiRequest(request);
+    if (!auth.ok) return auth.response;
+    const { apiKeyRecord } = auth;
 
     // 2. Buscar plano
     const plano = await prisma.plano.findUnique({
@@ -50,12 +34,15 @@ export async function GET(
         propietario: true,
         pdfUrl: true,
         pdfSize: true,
+        dxfUrl: true,
+        dxfSize: true,
         thumbnailUrl: true,
         status: true,
         jobId: true,
         errorMessage: true,
         config: true,
         source: true,
+        userId: true,
         generatedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -72,10 +59,22 @@ export async function GET(
       }, { status: 404 });
     }
 
-    // 3. Respuesta
+    // 2b. Verificar que el plano pertenezca al usuario de la API key
+    if (plano.userId !== apiKeyRecord.userId) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'No tienes permiso para ver este plano'
+        }
+      }, { status: 403 });
+    }
+
+    // 3. Respuesta (sin exponer userId internamente)
+    const { userId: _userId, ...planoResponse } = plano;
     return NextResponse.json<ApiResponse>({
       success: true,
-      data: plano
+      data: planoResponse
     });
 
   } catch (error) {
@@ -111,6 +110,15 @@ export async function DELETE(
                 error: { code: 'INVALID_API_KEY', message: 'API key inválida' }
             }, { status: 401 });
         }
+
+        const rate = await checkRateLimit(apiKeyRecord.id, apiKeyRecord.rateLimit);
+        if (!rate.allowed) {
+            return NextResponse.json<ApiResponse>({
+                success: false,
+                error: { code: 'RATE_LIMIT_EXCEEDED', message: `Límite de ${rate.limit} peticiones/hora excedido.` }
+            }, { status: 429 });
+        }
+
         // Validar que el plano pertenezca al usuario de la API Key
         const plano = await prisma.plano.findUnique({ where: { id }, select: { userId: true } });
         if (plano && plano.userId !== apiKeyRecord.userId) {
