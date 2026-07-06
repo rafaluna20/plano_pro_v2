@@ -6,8 +6,8 @@ export interface Colindancia {
       | 'NORTE' | 'SUR' | 'ESTE' | 'OESTE' | 'FRENTE' | 'FONDO' | 'DERECHA' | 'IZQUIERDA';
   tipo: 'lote' | 'calle' | 'area_verde' | 'area_comun';
   nombre: string;
-  propietario?: string;
-  longitud?: number;
+  propietario?: string | null;
+  longitud?: number | null;
   coordinates?: UTMCoordinate[];
 }
 

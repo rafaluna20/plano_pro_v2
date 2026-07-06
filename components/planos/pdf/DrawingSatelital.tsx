@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Image, Text } from '@react-pdf/renderer';
 
 interface Props {

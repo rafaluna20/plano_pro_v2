@@ -8,6 +8,69 @@ import { z } from 'zod';
  * - Contexto Visual (Vectores o Imagen Base64)
  */
 
+// ==========================================
+// TIPOS PARA EL STORE (FRONTEND LEGACY)
+// ==========================================
+
+export interface Vertice {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export interface MembreteData {
+  proyecto: string;
+  plano: string;
+  profesional: string;
+  registro: string;
+  fecha: string;
+  lamina: string;
+  escala: string;
+}
+
+export interface Dimensiones {
+  frente: number;
+  fondo: number;
+  izquierda: number;
+  derecha: number;
+  ladoDerecho: number;
+  ladoIzquierdo: number;
+  area: number;
+  perimetro: number;
+}
+
+export interface Colindantes {
+  frente: string;
+  fondo: string;
+  izquierda: string;
+  derecha: string;
+}
+
+export interface LoteVecino {
+  id: string;
+  nombre: string;
+  vertices: Vertice[];
+}
+
+export interface LoteData {
+  loteId: string;
+  propietario: string;
+  dimensiones: Dimensiones;
+  colindantes: Colindantes;
+  membrete: MembreteData;
+  vertices: Vertice[];
+  contexto: {
+    vecinos: LoteVecino[];
+  };
+  config: {
+    usarGoogleMaps: boolean;
+  };
+}
+
+// ==========================================
+// ESQUEMAS API V2 (ZOD)
+// ==========================================
+
 // 1. Coordenadas Simples [x, y]
 // Reemplaza al antiguo objeto {id, x, y} para ser compatible con la data pura de GeoJSON/Leaflet
 export const VerticeCoordenadaSchema = z.tuple([
@@ -27,7 +90,7 @@ export const DimensionesSchema = z.object({
   perimetro: z.number().positive('El perímetro debe ser mayor a 0'),
 });
 
-export type Dimensiones = z.infer<typeof DimensionesSchema>;
+export type DimensionesCalculadas = z.infer<typeof DimensionesSchema>;
 
 // 3. Colindancias (Nuevo formato: Array Detallado)
 // Sirve para generar la Memoria Descriptiva textualmente

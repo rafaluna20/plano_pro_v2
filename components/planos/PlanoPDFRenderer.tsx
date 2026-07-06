@@ -3,12 +3,6 @@
 import React from 'react';
 import { Document, Page, View, Text, StyleSheet, Svg, Path, Line, Circle, Rect, G } from '@react-pdf/renderer';
 
-// @react-pdf/types no declara fontSize/fontWeight en SVGTextProps, pero el
-// renderer sí los lee en runtime (node.props.fontSize) para <SvgText> dentro de <Svg>.
-const SvgText = Text as unknown as React.ComponentType<
-  React.ComponentProps<typeof Text> & { fontSize?: number; fontWeight?: string }
->;
-
 // --- TIPOS ---
 interface Point { id: string; x: number; y: number; }
 interface Props {
@@ -267,6 +261,8 @@ export const PlanoTopograficoPDF = ({
     return `M ${startX} ${startY} A ${radius} ${radius} 0 0 ${sweepFlag} ${endX} ${endY}`;
   };
 
+  const TextAny = Text as any;
+
   return (
     <Document>
       <Page size="A3" orientation="landscape" style={styles.page}>
@@ -297,20 +293,18 @@ export const PlanoTopograficoPDF = ({
                 if (i % 2 !== 0) return null;
                 const p = toPaper(x, gridLinesY[0]);
                 return (
-                  <SvgText key={`lx-${x}`} x={p.x} y={VIEWPORT_H - 5} fontSize={5} fill="#444" textAnchor="middle">
-                    {x.toFixed(0)}E
-                  </SvgText>
+                  <TextAny key={`lx-${x}`} x={p.x} y={VIEWPORT_H - 5} style={{ fontSize: 5, fill: "#444", textAnchor: "middle" }}>
+                    {`${x.toFixed(0)}E`}
+                  </TextAny>
                 );
               })}
               {gridLinesY.map((y, i) => {
                 if (i % 2 !== 0) return null;
                 const p = toPaper(gridLinesX[0], y);
-                // React-PDF Svg Text no soporta rotation facilmente en todos los renderers, 
-                // pero si soporta transform.
                 return (
-                  <SvgText key={`ly-${y}`} x={5} y={p.y} fontSize={5} fill="#444" textAnchor="start">
-                    {y.toFixed(0)}N
-                  </SvgText>
+                  <TextAny key={`ly-${y}`} x={5} y={p.y} style={{ fontSize: 5, fill: "#444", textAnchor: "start" }}>
+                    {`${y.toFixed(0)}N`}
+                  </TextAny>
                 );
               })}
 
@@ -328,12 +322,12 @@ export const PlanoTopograficoPDF = ({
                   stroke="#000" 
                   strokeWidth={0.5} 
                 />
-                <SvgText x={centroid.x} y={centroid.y - 2} fontSize={5} fontWeight="bold" textAnchor="middle">
-                  ÁREA = {area.toFixed(2)} m²
-                </SvgText>
-                <SvgText x={centroid.x} y={centroid.y + 5} fontSize={5} fontWeight="bold" textAnchor="middle">
-                  PERÍMETRO = {perimetro.toFixed(2)} ml
-                </SvgText>
+                <TextAny x={centroid.x} y={centroid.y - 2} style={{ fontSize: 5, fontWeight: "bold", textAnchor: "middle" }}>
+                  {`ÁREA = ${area.toFixed(2)} m²`}
+                </TextAny>
+                <TextAny x={centroid.x} y={centroid.y + 5} style={{ fontSize: 5, fontWeight: "bold", textAnchor: "middle" }}>
+                  {`PERÍMETRO = ${perimetro.toFixed(2)} ml`}
+                </TextAny>
               </G>
 
               {/* Vértices y Ángulos */}
@@ -354,21 +348,21 @@ export const PlanoTopograficoPDF = ({
                   <G key={`v-${i}`}>
                     {/* Arco Ángulo */}
                     <Path d={arcPath} stroke="#666" strokeWidth={0.5} strokeDasharray="2,2" fill="none" />
-                    <SvgText x={p.x + 15} y={p.y - 10} fontSize={5} fill="#666">
+                    <TextAny x={p.x + 15} y={p.y - 10} style={{ fontSize: 5, fill: "#666" }}>
                       {decimalToDMSShort(anguloVal)}
-                    </SvgText>
+                    </TextAny>
 
                     {/* Vértice */}
                     <Circle cx={p.x} cy={p.y} r={2} fill="white" stroke="#000" strokeWidth={0.5} />
-                    <SvgText x={p.x + 3} y={p.y - 3} fontSize={6} fontWeight="bold">
+                    <TextAny x={p.x + 3} y={p.y - 3} style={{ fontSize: 6, fontWeight: "bold" }}>
                       {v.id}
-                    </SvgText>
+                    </TextAny>
 
                     {/* Distancia Lado */}
                     <Rect x={midX - 10} y={midY - 4} width={20} height={8} fill="white" />
-                    <SvgText x={midX} y={midY} fontSize={5} textAnchor="middle">
-                      {distVal}m
-                    </SvgText>
+                    <TextAny x={midX} y={midY} style={{ fontSize: 5, textAnchor: "middle" }}>
+                      {`${distVal}m`}
+                    </TextAny>
                   </G>
                 );
               })}
@@ -377,7 +371,7 @@ export const PlanoTopograficoPDF = ({
               <G transform={`translate(${VIEWPORT_W - 50}, 50)`}>
                  <Line x1={0} y1={-20} x2={0} y2={20} stroke="black" strokeWidth={1} />
                  <Path d="M 0 -20 L -3 -10 L 3 -10 Z" fill="black" />
-                 <SvgText x={-3} y={-25} fontSize={10} fontWeight="bold">N</SvgText>
+                 <TextAny x={-3} y={-25} style={{ fontSize: 10, fontWeight: "bold" }}>N</TextAny>
               </G>
 
             </Svg>

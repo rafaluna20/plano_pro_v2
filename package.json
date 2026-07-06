@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "lint": "eslint",
     "worker": "tsx workers/plano-generator.ts",
     "worker:dev": "tsx watch workers/plano-generator.ts"
