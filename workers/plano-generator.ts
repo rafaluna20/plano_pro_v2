@@ -28,7 +28,7 @@ console.log('📍 Redis:', `${redisConnection.host}:${redisConnection.port}`);
 const worker = new Worker<GenerarPlanoJob>(
   'planos-generation',
   async (job: Job<GenerarPlanoJob>) => {
-    const { planoId, vertices, dimensiones, lote, colindancias, config, userId, contexto } = job.data;
+    const { planoId, vertices, dimensiones, lote, colindancias, config, userId, contexto, propietario } = job.data;
 
     console.log(`\n📋 Procesando Job ID: ${job.id}`);
     console.log(`   Plano ID: ${planoId}`);
@@ -54,6 +54,8 @@ const worker = new Worker<GenerarPlanoJob>(
         dimensiones,
         lote,
         colindancias,
+        propietario,
+        contexto,
         config
       });
 

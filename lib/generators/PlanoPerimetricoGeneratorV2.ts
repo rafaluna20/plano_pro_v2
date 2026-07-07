@@ -141,7 +141,7 @@ export class PlanoPerimetricoGeneratorV2 {
     this.drawVerticesAndDimensions(pdf, paperPoints, cad);
 
     // E. Título y Norte
-    this.drawTitle(pdf, layout.drawingArea, "PLANO PERIMÉTRICO");
+    this.drawTitle(pdf, layout.drawingArea, "PLANO PERIMÉTRICO", paperPoints);
     this.drawNorthCatastro(
       pdf,
       layout.drawingArea.x +
@@ -1347,11 +1347,29 @@ export class PlanoPerimetricoGeneratorV2 {
     );
   }
 
-  private drawTitle(pdf: jsPDF, area: AreaDibujo, title: string): void {
+  private drawTitle(
+    pdf: jsPDF,
+    area: AreaDibujo,
+    title: string,
+    paperPoints?: Array<[number, number]>,
+  ): void {
     const { TITULO } = PLANO_THEME;
 
     const centerX = area.x + area.width / 2;
-    const titleY = area.y + area.height - TITULO.OFFSET_BOTTOM;
+
+    // Posicionar el título debajo del punto más bajo del polígono dibujado
+    // (no un offset fijo desde el borde), para que lotes alargados o rotados
+    // que se extiendan hacia abajo no queden tapados por el título.
+    const defaultTitleY = area.y + area.height - TITULO.OFFSET_BOTTOM;
+    let titleY = defaultTitleY;
+    if (paperPoints && paperPoints.length > 0) {
+      const maxPolygonY = Math.max(...paperPoints.map(([, y]) => y));
+      const CLEARANCE_BELOW_POLYGON = 12; // mm: espacio para cotas + separación visual
+      const MIN_MARGIN_FROM_FRAME = 8; // mm: no pegar el título al marco inferior
+      const desiredY = maxPolygonY + CLEARANCE_BELOW_POLYGON;
+      const maxAllowedY = area.y + area.height - MIN_MARGIN_FROM_FRAME;
+      titleY = Math.min(Math.max(desiredY, defaultTitleY), maxAllowedY);
+    }
 
     pdf.setFillColor(255, 255, 255);
     const fontSize = PLANO_THEME.FONTS.SIZES.H1;
