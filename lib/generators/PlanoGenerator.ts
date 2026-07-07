@@ -81,6 +81,13 @@ export class PlanoGenerator {
       });
 
       // 2. Definir la Cola de Producción
+      // El generador de perimétrico se nombra aparte porque PlanoUbicacion
+      // necesita leer su escala final (getEscalaUtilizada()) para mantener
+      // una proporción visual consistente entre ambos documentos. Como el
+      // perimétrico corre antes en la cola, el valor ya está listo para
+      // cuando Ubicación lo lee dentro de su propio generate().
+      const planoPerimetricoGen = new PlanoPerimetricoGeneratorV2(hybridPayload, datosProcesados);
+
       const queue: Array<{
         condition: boolean;
         generator: IDocumentGenerator;
@@ -95,14 +102,13 @@ export class PlanoGenerator {
           },
           {
             condition: !!this.config.incluirPlanoPerimetrico,
-            // Usamos el generador V2 inyectando los datos ya procesados
-            generator: new PlanoPerimetricoGeneratorV2(hybridPayload, datosProcesados),
+            generator: planoPerimetricoGen,
             format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
             name: 'Plano Perimétrico'
           },
           {
             condition: !!this.config.incluirPlanoUbicacion,
-            generator: new PlanoUbicacionGenerator(this.request, this.config),
+            generator: new PlanoUbicacionGenerator(this.request, this.config, planoPerimetricoGen),
             format: this.config.formatosPersonalizados!.planoUbicacion as { formato: any; orientacion: any },
             name: 'Plano Ubicación'
           }

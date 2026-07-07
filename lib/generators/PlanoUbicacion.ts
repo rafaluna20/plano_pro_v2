@@ -13,10 +13,18 @@ import { MapService } from '@/lib/services/MapService';
  * 2. Imagen (Captura Leaflet) -> Contexto Visual
  * 3. Mapa Server (Google/Mapbox) -> Fallback
  */
+interface PerimetricoScaleSource {
+  getEscalaUtilizada(): number | null;
+}
+
 export class PlanoUbicacionGenerator {
   private request: GenerarPlanosRequest;
 
-  constructor(request: GenerarPlanosRequest, private config: PlanoConfig) {
+  constructor(
+    request: GenerarPlanosRequest,
+    private config: PlanoConfig,
+    private perimetricoSource?: PerimetricoScaleSource,
+  ) {
     this.request = request;
   }
 
@@ -68,8 +76,20 @@ export class PlanoUbicacionGenerator {
       });
     }
 
-    // Calculamos escala con un margen generoso (40mm) para ver calles aledañas
-    const { escala, escalaTexto } = this.calculateScaleForViewport(verticesParaEscala, drawingArea.width, drawingArea.height, 40);
+    // Escala objetivo: mantener una proporción visual fija respecto al plano
+    // perimétrico (ej. perimétrico 1/75 -> ubicación 1/1500, siempre x20),
+    // para que ambos documentos "se sientan" consistentes entre sí en vez de
+    // una escala arbitraria por lote. Si no hay perimétrico generado en este
+    // expediente (config sin incluirPlanoPerimetrico), cae al auto-ajuste puro.
+    const RATIO_UBICACION_SOBRE_PERIMETRICO = 20;
+    const escalaPerimetrico = this.perimetricoSource?.getEscalaUtilizada() ?? null;
+    const escalaObjetivo = escalaPerimetrico ? escalaPerimetrico * RATIO_UBICACION_SOBRE_PERIMETRICO : undefined;
+
+    // Calculamos escala con un margen generoso (40mm) para ver calles aledañas.
+    // Nunca queda por debajo de lo que se necesita para que todo el contexto
+    // entre en el recuadro: si la proporción x20 se queda corta (vecindario
+    // muy denso), se usa la escala real necesaria en su lugar.
+    const { escala, escalaTexto } = this.calculateScaleForViewport(verticesParaEscala, drawingArea.width, drawingArea.height, 40, escalaObjetivo);
     
     // Centroide del dibujo
     const centroDrawing = calculateCentroid(vertices); // Centramos en NUESTRO lote, no en los vecinos
@@ -228,11 +248,11 @@ export class PlanoUbicacionGenerator {
   // MÉTODOS AUXILIARES
   // ===========================================================================
 
-  private calculateScaleForViewport(vertices: [number, number][], widthMm: number, heightMm: number, marginMm: number) {
+  private calculateScaleForViewport(vertices: [number, number][], widthMm: number, heightMm: number, marginMm: number, escalaObjetivo?: number) {
     const bbox = getBoundingBox(vertices);
     const availWidth = widthMm - (marginMm * 2);
     const availHeight = heightMm - (marginMm * 2);
-    
+
     // Protección contra dimensiones 0
     const w = bbox.width || 10;
     const h = bbox.height || 10;
@@ -240,12 +260,23 @@ export class PlanoUbicacionGenerator {
     const scaleX = (w * 1000) / availWidth;
     const scaleY = (h * 1000) / availHeight;
     const rawScale = Math.max(scaleX, scaleY);
-    
+
     // Escalas normalizadas para Ubicación (suelen ser mayores: 500, 1000, 5000)
     const standardScales = [100, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 7500, 10000];
-    let finalScale = standardScales.find(s => s >= rawScale);
-    if (!finalScale) finalScale = Math.ceil(rawScale / 500) * 500;
-    
+    const snapUp = (n: number) => standardScales.find(s => s >= n) ?? Math.ceil(n / 500) * 500;
+
+    // Escala mínima que efectivamente entra en el recuadro (nunca se puede
+    // bajar de esto sin que el dibujo se desborde).
+    const finalScaleNecesaria = snapUp(rawScale);
+
+    // Si hay una escala objetivo (relación x20 con el perimétrico), se
+    // respeta siempre que alcance para mostrar todo el contexto; si el
+    // vecindario es más denso de lo que esa proporción permite, se usa la
+    // necesaria en su lugar para no romper el dibujo.
+    const finalScale = escalaObjetivo
+      ? Math.max(snapUp(escalaObjetivo), finalScaleNecesaria)
+      : finalScaleNecesaria;
+
     return { escala: finalScale, escalaTexto: `1/${finalScale}` };
   }
 

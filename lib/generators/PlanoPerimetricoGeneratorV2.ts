@@ -56,6 +56,17 @@ export class PlanoPerimetricoGeneratorV2 {
   private payload: PlanoPayloadHibrido;
   private datosProcesados: DatosProcesados;
   private colorCache: { header: { r: number; g: number; b: number } };
+  private escalaUtilizada: number | null = null;
+
+  /**
+   * Escala final (denominador) usada para dibujar el lote en este plano
+   * perimétrico. Disponible recién después de llamar a generate(). La usa
+   * PlanoUbicacionGenerator para mantener una proporción visual consistente
+   * entre ambos documentos (ej. perimétrico 1/75 -> ubicación 1/1500).
+   */
+  getEscalaUtilizada(): number | null {
+    return this.escalaUtilizada;
+  }
 
   constructor(payload: PlanoPayloadHibrido, datosProcesados: DatosProcesados) {
     this.payload = payload;
@@ -94,6 +105,7 @@ export class PlanoPerimetricoGeneratorV2 {
       layout.drawingArea.height,
       PLANO_THEME.LAYOUT.DIBUJO.MARGEN_INTERNO,
     );
+    this.escalaUtilizada = escalaMain.escala;
 
     const centerX = layout.drawingArea.x + layout.drawingArea.width / 2;
     const centerY = layout.drawingArea.y + layout.drawingArea.height / 2;
@@ -481,7 +493,12 @@ export class PlanoPerimetricoGeneratorV2 {
 
     // 1. Centroide del Lote Principal (Ancla para filtrado)
     const centroIdLote = calculateCentroid(mainVertices);
-    const MAX_RADIUS = 800; // Filtrar features a más de 800m para evitar errores de escala
+    // El croquis es un thumbnail de orientación rápida (recuadro de ~85x60mm
+    // útiles), no el plano de ubicación detallado — usa un radio propio,
+    // independiente del radio de contexto principal (200m), para que siempre
+    // quede legible sin importar cuántos vecinos se hayan calculado para el
+    // resto del expediente.
+    const MAX_RADIUS = 70;
 
     // 2. Recolectar coordenadas VÁLIDAS para el BBox
     const validCoords: [number, number][] = [...mainVertices];
@@ -512,20 +529,29 @@ export class PlanoPerimetricoGeneratorV2 {
     const contentH = bbox.height || 50;
     const marginFactor = UBICACION.MARGIN_FACTOR;
 
-    // Lógica de Escala con limites técnicos (JS handles 1/scale)
-    let rawScale = Math.min(
+    // rawScale son mm de papel por metro real (dx_mm = dx_metros * rawScale).
+    // El mínimo de los dos ejes es lo más grande que cabe sin desbordar.
+    const rawScaleNecesaria = Math.min(
       (drawW * marginFactor) / contentW,
       (drawH * marginFactor) / contentH,
     );
 
-    // Limitar escala mínima (evitar ver "todo el planeta")
-    // 1:10000 es aprox rawScale = 1000 / 10000 = 0.1
-    // 1:25000 es 0.04. Usaremos 0.04 como piso.
-    rawScale = Math.max(0.04, rawScale);
+    // Denominador de escala "1:N" correspondiente: N = 1000 / (mm por metro).
+    // (La fórmula anterior usaba 25.4 en vez de 1000, mostrando un número de
+    // escala que no correspondía a lo realmente dibujado.)
+    const nominalNecesario = 1000 / Math.max(rawScaleNecesaria, 0.0001);
 
-    // Texto de Escala (Corregido)
-    // Formula: 1 / (scale / (1000 / 25.4)) -> Simplificado: 25.4 / scale
-    const escalaNominal = Math.round(25.4 / rawScale);
+    // Redondear SIEMPRE hacia una escala estándar más alejada (nunca más
+    // cercana): así el dibujo real nunca ocupa más espacio del necesario y
+    // jamás se desborda del recuadro, y además el número que se imprime es
+    // uno reconocible por cualquier escalímetro (750, 1000, 1500...), igual
+    // que ya hace el plano de ubicación de la página 4.
+    const ESCALAS_ESTANDAR = [100, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 7500, 10000];
+    const escalaNominal = ESCALAS_ESTANDAR.find((s) => s >= nominalNecesario)
+      ?? Math.ceil(nominalNecesario / 500) * 500;
+
+    const rawScale = 1000 / escalaNominal;
+
     pdf.setFontSize(6);
     pdf.setTextColor(0);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
