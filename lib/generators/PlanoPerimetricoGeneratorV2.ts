@@ -540,11 +540,13 @@ export class PlanoPerimetricoGeneratorV2 {
     // El auto-fit no debe encuadrar el 100% de la extensión recolectada
     // (lote + todos los vecinos del payload): eso deja el lote como un punto
     // diminuto perdido entre manzanas lejanas. Fingimos que el contenido a
-    // encuadrar es solo el 60% de su ancho/alto real, así el zoom queda más
-    // cerrado y el lote se ve prominente; el 40% más externo del contexto
-    // recolectado queda fuera del recuadro (el clip de drawLocationPlanAutoScale
-    // ya se encarga de recortarlo limpiamente, no hace falta filtrar antes).
-    const CONTEXT_VISIBLE_FRACTION = 0.6;
+    // encuadrar es solo una fracción de su ancho/alto real, así el zoom
+    // queda más cerrado y el lote se ve prominente; lo que sobra del
+    // contexto recolectado queda fuera del recuadro (el clip de
+    // drawLocationPlanAutoScale ya se encarga de recortarlo limpiamente, no
+    // hace falta filtrar antes). 0.72 = zoom extendido 20% respecto al 0.6
+    // anterior (más zoom-out, se ve más contexto alrededor del lote).
+    const CONTEXT_VISIBLE_FRACTION = 0.72;
 
     // 2. Recolectar coordenadas para el BBox: TODOS los vecinos del payload,
     // sin filtro de radio propio. Antes había un MAX_RADIUS=70m hardcodeado
