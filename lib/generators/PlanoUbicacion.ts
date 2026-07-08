@@ -76,14 +76,19 @@ export class PlanoUbicacionGenerator {
       });
     }
 
-    // Escala objetivo: mantener una proporción visual fija respecto al plano
-    // perimétrico (ej. perimétrico 1/75 -> ubicación 1/1500, siempre x20),
-    // para que ambos documentos "se sientan" consistentes entre sí en vez de
-    // una escala arbitraria por lote. Si no hay perimétrico generado en este
+    // Escala objetivo: relación lineal con el plano perimétrico (dato del
+    // usuario, ajustada por dos puntos reales: perimétrico 1/75 -> ubicación
+    // 1/1000, y perimétrico 1/100 -> ubicación 1/1500). Eso da pendiente 20 e
+    // intercepto -500, no un simple múltiplo x20 (100*20 daría 2000, no 1500).
+    // Así ambos documentos "se sienten" consistentes entre sí en vez de una
+    // escala arbitraria por lote. Si no hay perimétrico generado en este
     // expediente (config sin incluirPlanoPerimetrico), cae al auto-ajuste puro.
-    const RATIO_UBICACION_SOBRE_PERIMETRICO = 20;
+    const PENDIENTE_UBICACION_SOBRE_PERIMETRICO = 20;
+    const INTERCEPTO_UBICACION_SOBRE_PERIMETRICO = -500;
     const escalaPerimetrico = this.perimetricoSource?.getEscalaUtilizada() ?? null;
-    const escalaObjetivo = escalaPerimetrico ? escalaPerimetrico * RATIO_UBICACION_SOBRE_PERIMETRICO : undefined;
+    const escalaObjetivo = escalaPerimetrico
+      ? Math.max(0, escalaPerimetrico * PENDIENTE_UBICACION_SOBRE_PERIMETRICO + INTERCEPTO_UBICACION_SOBRE_PERIMETRICO)
+      : undefined;
 
     // Calculamos escala con un margen generoso (40mm) para ver calles aledañas.
     // Nunca queda por debajo de lo que se necesita para que todo el contexto
@@ -269,9 +274,9 @@ export class PlanoUbicacionGenerator {
     // bajar de esto sin que el dibujo se desborde).
     const finalScaleNecesaria = snapUp(rawScale);
 
-    // Si hay una escala objetivo (relación x20 con el perimétrico), se
+    // Si hay una escala objetivo (relación lineal con el perimétrico), se
     // respeta siempre que alcance para mostrar todo el contexto; si el
-    // vecindario es más denso de lo que esa proporción permite, se usa la
+    // vecindario es más denso de lo que esa relación permite, se usa la
     // necesaria en su lugar para no romper el dibujo.
     const finalScale = escalaObjetivo
       ? Math.max(snapUp(escalaObjetivo), finalScaleNecesaria)
