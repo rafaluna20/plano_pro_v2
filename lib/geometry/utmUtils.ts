@@ -91,6 +91,50 @@ export function calculateBearing(p1: UTMCoordinate, p2: UTMCoordinate): number {
 }
 
 /**
+ * Calcula los ángulos internos de un polígono simple, uno por vértice, en el
+ * mismo orden que `vertices` (sin el punto de cierre).
+ *
+ * No asume el sentido de recorrido (horario/antihorario): determina la
+ * orientación real a partir del signo del área firmada (shoelace) del propio
+ * arreglo recibido, así que funciona igual en coordenadas UTM (Y hacia el
+ * norte) que en coordenadas de papel/pantalla (Y invertido) sin necesitar dos
+ * fórmulas distintas. La suma de los ángulos retornados siempre da (n-2)*180.
+ *
+ * Antes existían 3-4 implementaciones divergentes de este cálculo en el
+ * proyecto; una de ellas (ver git history de PlanoDataProcessor.ts) asumía
+ * sentido antihorario fijo y devolvía el ángulo reflejo (ej. 270° en vez de
+ * 90°) cuando el polígono venía en sentido horario. Todos los consumidores
+ * deben usar esta función en vez de recalcular el ángulo por su cuenta.
+ */
+export function calculateInteriorAngles(vertices: UTMCoordinate[]): number[] {
+  const n = vertices.length;
+  if (n < 3) {
+    throw new Error('Se requieren al menos 3 vértices para calcular ángulos internos');
+  }
+
+  let signedArea = 0;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = vertices[i];
+    const [x2, y2] = vertices[(i + 1) % n];
+    signedArea += x1 * y2 - x2 * y1;
+  }
+  const isPositiveWinding = signedArea > 0;
+
+  return vertices.map((p, i) => {
+    const prev = vertices[(i - 1 + n) % n];
+    const next = vertices[(i + 1) % n];
+
+    const aPrev = Math.atan2(prev[1] - p[1], prev[0] - p[0]);
+    const aNext = Math.atan2(next[1] - p[1], next[0] - p[0]);
+
+    let angleRad = isPositiveWinding ? aPrev - aNext : aNext - aPrev;
+    if (angleRad < 0) angleRad += Math.PI * 2;
+
+    return angleRad * (180 / Math.PI);
+  });
+}
+
+/**
  * Obtiene el bounding box de un conjunto de vértices
  */
 export function getBoundingBox(vertices: UTMCoordinate[]): {

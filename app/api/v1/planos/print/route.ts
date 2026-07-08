@@ -4,6 +4,7 @@ import PlanoDocument from "@/components/planos/pdf/PlanoDocument";
 import React from "react";
 import proj4 from "proj4";
 import { MapService } from "@/lib/services/MapService";
+import { verifyToken, extractTokenFromHeader } from "@/lib/auth/jwt";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +13,20 @@ const UTM_18S = "+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs";
 
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get("authorization");
-
-    if (
-      !authHeader ||
-      authHeader !== `${process.env.NEXT_PUBLIC_PDF_API_TOKEN}`
-    ) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Requiere la sesión JWT real del usuario logueado (la misma que emite
+    // /api/v1/auth/login), no un secreto compartido: este endpoint se llama
+    // directo desde el navegador, así que cualquier token estático fijo
+    // terminaría expuesto en el bundle/cliente (NEXT_PUBLIC_ o no).
+    const bearerToken = extractTokenFromHeader(req.headers.get("authorization"));
+    if (!bearerToken) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
+    try {
+      verifyToken(bearerToken);
+    } catch {
+      return NextResponse.json({ error: "Sesión inválida o expirada" }, { status: 401 });
+    }
+
     const data = await req.json();
 
     // The frontend sends INITIAL_DATA, but PlanoDocument expects a flattened PlanoDocumentProps interface.

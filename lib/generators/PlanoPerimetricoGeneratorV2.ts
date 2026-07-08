@@ -22,6 +22,7 @@ import {
   getBoundingBox,
   calculateCentroid,
   utmToLatLng,
+  calculateInteriorAngles,
 } from "@/lib/geometry/utmUtils";
 import { MapService } from "@/lib/services/MapService";
 import { PLANO_THEME, getGridInterval } from "@/lib/config/PlanoTheme";
@@ -755,14 +756,9 @@ export class PlanoPerimetricoGeneratorV2 {
     // Filas de datos (USANDO LINDEROS PROCESADOS)
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
 
-    // CALCULO DE GEOMETRÍA: Determinar area y orientación para ángulos correctos
-    let signedArea = 0;
-    for (let j = 0; j < vertices.length; j++) {
-      const p1 = vertices[j];
-      const p2 = vertices[(j + 1) % vertices.length];
-      signedArea += p1[0] * p2[1] - p2[0] * p1[1];
-    }
-    const isPositiveArea = signedArea > 0;
+    // Ángulos internos: única fuente de verdad (lib/geometry/utmUtils),
+    // robusta ante el sentido de recorrido del polígono.
+    const angulosInternos = calculateInteriorAngles(vertices);
 
     let totalLength = 0;
     let totalAngle = 0;
@@ -821,20 +817,8 @@ export class PlanoPerimetricoGeneratorV2 {
         totalLength += isNaN(lenVal) ? 0 : lenVal;
         drawCell(lindero.longitudTexto + "m", colW[2]);
 
-        // ⭐ MOSTRAR ángulo interno calculado (ROBUSTO)
-        // Recalcular usando vertexIdx (ya definido arriba)
-        const cur = vertices[vertexIdx];
-        const prev =
-          vertices[(vertexIdx - 1 + vertices.length) % vertices.length];
-        const next = vertices[(vertexIdx + 1) % vertices.length];
-
-        const aPrev = Math.atan2(prev[1] - cur[1], prev[0] - cur[0]);
-        const aNext = Math.atan2(next[1] - cur[1], next[0] - cur[0]);
-
-        // Formula invariante: Si el area es positiva, ángulo = prev - next
-        let angRad = isPositiveArea ? aPrev - aNext : aNext - aPrev;
-        if (angRad < 0) angRad += Math.PI * 2;
-        const angDeg = angRad * (180 / Math.PI);
+        // ⭐ MOSTRAR ángulo interno (fuente única: calculateInteriorAngles)
+        const angDeg = angulosInternos[vertexIdx];
 
         totalAngle += angDeg;
 
@@ -970,16 +954,11 @@ export class PlanoPerimetricoGeneratorV2 {
     paperPoints: [number, number][],
     cad: CADDrawing,
   ): void {
-    // 1. Determinar Orientación del Polígono (Signed Area)
-    // Area Positiva = CW (Clockwise) en sistema de pantalla (Y abajo)
-    // Area Negativa = CCW (Counter-Clockwise)
-    let signedArea = 0;
-    for (let i = 0; i < paperPoints.length; i++) {
-      const p1 = paperPoints[i];
-      const p2 = paperPoints[(i + 1) % paperPoints.length];
-      signedArea += p1[0] * p2[1] - p2[0] * p1[1];
-    }
-    const isCW = signedArea > 0;
+    // Ángulos internos: única fuente de verdad (lib/geometry/utmUtils),
+    // robusta ante el sentido de recorrido del polígono. Funciona igual en
+    // espacio papel (Y invertido) que en UTM porque detecta la orientación
+    // a partir del propio arreglo de puntos recibido.
+    const angulosInternos = calculateInteriorAngles(paperPoints);
 
     // Vértices y Ángulos
     paperPoints.forEach((p, i) => {
@@ -988,41 +967,9 @@ export class PlanoPerimetricoGeneratorV2 {
         paperPoints[(i - 1 + paperPoints.length) % paperPoints.length];
       const next = paperPoints[(i + 1) % paperPoints.length];
 
-      // Ángulos absolutos de los vectores hacia prev y next
-      const aPrev = Math.atan2(prev[1] - p[1], prev[0] - p[0]);
-      const aNext = Math.atan2(next[1] - p[1], next[0] - p[0]);
-
-      // Calcular diferencia en sentido horario (Next -> Prev)
-      let angle = aPrev - aNext;
-      if (angle < 0) angle += Math.PI * 2;
-
-      // Lógica de Interior:
-      // Si el polígono es CW (sentido horario), el interior está a la DERECHA del recorrido.
-      // El ángulo barrido desde Next hacia Prev en sentido horario ES el ángulo interno.
-      // E.g. Cuadrado CW: Next(0°), Prev(-90°=270°). Diff = 270 - 0 = 270? No.
-      // aPrev = -90, aNext = 0. Diff = -90 -> 270.
-      // Cuadrado CW interno es 90.
-      // Entonces para CW, el interno es (aNext - aPrev)?
-      // aNext(0) - aPrev(-90) = 90. Correcto.
-
-      let internalAngleRad = 0;
-
-      if (isCW) {
-        // Polígono Horario (Screen Y-Down): Interior = aPrev - aNext
-        // E.g. Top-Right Corner (Prev=180, Next=90). Int=90.
-        // 180 - 90 = 90. Correcto.
-        internalAngleRad = aPrev - aNext;
-      } else {
-        // Polígono Anti-Horario: Interior = aNext - aPrev
-        internalAngleRad = aNext - aPrev;
-      }
-
-      if (internalAngleRad < 0) internalAngleRad += Math.PI * 2;
-
-      const computedAngle = internalAngleRad * (180 / Math.PI);
+      const computedAngle = angulosInternos[i];
       const angleLabel = `${computedAngle.toFixed(2)}°`;
 
-      // Dibujar usando este valor calculado localmente
       this.drawInternalAngle(pdf, p, prev, next, angleLabel, computedAngle);
 
       // 2. Dibujar Vértice

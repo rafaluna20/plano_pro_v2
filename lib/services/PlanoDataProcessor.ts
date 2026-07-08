@@ -11,6 +11,7 @@
  */
 
 import * as turf from '@turf/turf';
+import { calculateInteriorAngles } from '@/lib/geometry/utmUtils';
 import type {
   PlanoPayloadHibrido,
   DatosRegistrales,
@@ -201,6 +202,12 @@ export class PlanoDataProcessor {
 
     // Calcular segmentos
     const coordinates = this.payload.loteObjetivo.geometry.coordinates[0];
+    // GeoJSON exige que el anillo se cierre (primer punto === último); lo
+    // quitamos para tener un vértice por lado, sin duplicados.
+    const verticesUnicos = coordinates.slice(0, -1) as [number, number][];
+    // Ángulos internos: calculados una sola vez, de forma robusta ante el
+    // sentido de recorrido del polígono (ver calculateInteriorAngles).
+    const angulosInternos = calculateInteriorAngles(verticesUnicos);
     const segmentos: SegmentoCalculado[] = [];
 
     for (let i = 0; i < coordinates.length - 1; i++) {
@@ -216,27 +223,13 @@ export class PlanoDataProcessor {
       // Azimut = atan2(ΔE, ΔN) convertido a grados desde el norte
       const azimut = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
 
-      // Calcular ángulo interno en el vértice actual
-      // Para calcular el ángulo interno necesitamos el segmento anterior y el actual
-      const prev = coordinates[(i - 1 + coordinates.length - 1) % (coordinates.length - 1)];
-      const dxPrev = inicio[0] - prev[0];
-      const dyPrev = inicio[1] - prev[1];
-      const azimutPrev = (Math.atan2(dxPrev, dyPrev) * 180 / Math.PI + 360) % 360;
-      
-      // Ángulo interno = diferencia entre azimuts
-      let anguloInterno = azimut - azimutPrev;
-      if (anguloInterno < 0) anguloInterno += 360;
-      // Para polígonos en sentido horario, el ángulo interno es 360 - diferencia
-      anguloInterno = 360 - anguloInterno;
-      if (anguloInterno > 360) anguloInterno -= 360;
-
       segmentos.push({
         index: i,
         verticeInicio: inicio,
         verticeFin: fin,
         distancia,
         azimut,
-        anguloInterno,
+        anguloInterno: angulosInternos[i],
         colindancia: '', // Se calculará después
         orientacion: '' // Se calculará después
       });

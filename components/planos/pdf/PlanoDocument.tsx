@@ -14,6 +14,7 @@ import {
 import DrawingVectorial, { decimalToDMSShort } from "./DrawingVectorial";
 import DrawingSatelital from "./DrawingSatelital";
 import DrawingImagen from "./DrawingImagen";
+import { calculateInteriorAngles } from "@/lib/geometry/utmUtils";
 
 interface Point {
   id: string;
@@ -171,16 +172,18 @@ export const PlanoDocument = ({
   const area = calculatePolygonArea(vertices);
   const perimetro = calculatePerimeter(vertices);
 
+  // Ángulos internos: única fuente de verdad (lib/geometry/utmUtils), robusta
+  // ante el sentido de recorrido del polígono (antes esta fórmula asumía un
+  // sentido fijo y devolvía el ángulo reflejo para el sentido contrario).
+  const angulosInternos = calculateInteriorAngles(
+    vertices.map((v) => [v.x, v.y] as [number, number]),
+  );
+
   const datosTecnicos = vertices.map((v, i) => {
     const next = vertices[(i + 1) % vertices.length];
-    const prev = vertices[(i - 1 + vertices.length) % vertices.length];
 
     const distancia = dist(v, next);
-
-    const angleToPrev = Math.atan2(prev.y - v.y, prev.x - v.x);
-    const angleToNext = Math.atan2(next.y - v.y, next.x - v.x);
-    let anguloInterno = (angleToNext - angleToPrev) * (180 / Math.PI);
-    if (anguloInterno < 0) anguloInterno += 360;
+    const anguloInterno = angulosInternos[i];
 
     return {
       vertice: v.id,

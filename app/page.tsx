@@ -572,7 +572,7 @@ const getGridStep = (range: number) => {
 
 export default function EditorPlanos() {
   const router = useRouter();
-  const { apiKey } = useAuth();
+  const { token } = useAuth();
 
   // Cargar CSS de Leaflet dinámicamente
   useEffect(() => {
@@ -1253,6 +1253,11 @@ export default function EditorPlanos() {
       return;
     }
 
+    if (!token) {
+      toast.error("Debes iniciar sesión para generar el PDF");
+      return;
+    }
+
     setLoading(true);
     let currentToast = toast.loading("Generando PDF (Nativo)...");
 
@@ -1261,7 +1266,7 @@ export default function EditorPlanos() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": process.env.NEXT_PUBLIC_PDF_API_TOKEN || "yOuR_sUpEr_sEcReT_tOkEn_2024!",
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           ...data,

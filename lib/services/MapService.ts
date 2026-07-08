@@ -1,8 +1,9 @@
 // src/lib/services/MapService.ts
 
-const GOOGLE_API_KEY =
-  process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ||
-  "AIzaSyAOOVXRZ8aIZv6oTiZMRJkT5cDGmjTFqOA";
+// Key exclusiva de servidor. NUNCA usar el prefijo NEXT_PUBLIC_ aquí: Next.js
+// inyecta esas variables en el bundle del navegador, y este servicio solo se
+// invoca desde generadores server-side (API routes / worker de BullMQ).
+const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_SERVER_KEY;
 
 export class MapService {
   /**
@@ -23,6 +24,13 @@ export class MapService {
     maptype: "roadmap" | "satellite" = "roadmap",
     adjacentPolygons?: Array<Array<[number, number]>>,
   ): Promise<string> {
+    if (!GOOGLE_API_KEY) {
+      console.warn(
+        "GOOGLE_MAPS_SERVER_KEY no configurada; omitiendo mapa estático de Google (fallback a croquis vectorial).",
+      );
+      return "";
+    }
+
     // 1. Validar dimensiones (Google Standard Tier limita a 640x640)
     const w = Math.min(width, 640);
     const h = Math.min(height, 640);
@@ -118,6 +126,13 @@ export class MapService {
     adjacentPolygons?: Array<Array<[number, number]>>,
     signal?: AbortSignal,
   ): Promise<{ data: Uint8Array; mimeType: string } | null> {
+    if (!GOOGLE_API_KEY) {
+      console.warn(
+        "GOOGLE_MAPS_SERVER_KEY no configurada; omitiendo mapa estático de Google (fallback a croquis vectorial).",
+      );
+      return null;
+    }
+
     const w = Math.min(width, 640);
     const h = Math.min(height, 640);
     const stylePoly = `color:0xFF0000FF|weight:2|fillcolor:0xFF000040`;
