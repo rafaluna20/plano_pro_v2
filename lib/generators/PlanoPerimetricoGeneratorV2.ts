@@ -17,7 +17,7 @@
 
 import { jsPDF } from "jspdf";
 import { CADDrawing } from "@/lib/geometry/cadDrawing";
-import { utmToPaper, metrosAPapel } from "@/lib/geometry/scaleUtils";
+import { utmToPaperRelative, metrosAPapel } from "@/lib/geometry/scaleUtils";
 import {
   getBoundingBox,
   calculateCentroid,
@@ -111,6 +111,14 @@ export class PlanoPerimetricoGeneratorV2 {
     const centerX = layout.drawingArea.x + layout.drawingArea.width / 2;
     const centerY = layout.drawingArea.y + layout.drawingArea.height / 2;
 
+    // Punto de referencia ÚNICO para todas las transformaciones UTM -> papel
+    // de este documento (lote, grilla y contexto de vecinos). Antes el lote
+    // se centraba con el centro del bounding box (utmToPaper) mientras que
+    // la grilla y los vecinos usaban el centroide (calculateCentroid) — en
+    // un lote irregular esos dos puntos no coinciden, así que el polígono
+    // quedaba visualmente desfasado respecto a la grilla y al contexto.
+    const centroUtm = calculateCentroid(utmVertices);
+
     // ========== 5. RENDERIZADO DEL CONTEXTO (FONDO) ==========
     const cad = new CADDrawing(pdf);
     this.renderContext(
@@ -135,8 +143,9 @@ export class PlanoPerimetricoGeneratorV2 {
     );
 
     // B. Lote Principal (Polígono grueso destacado)
-    const paperPoints = utmToPaper(
+    const paperPoints = utmToPaperRelative(
       utmVertices,
+      centroUtm,
       escalaMain.escala,
       centerX,
       centerY,
@@ -501,6 +510,15 @@ export class PlanoPerimetricoGeneratorV2 {
     // resto del expediente.
     const MAX_RADIUS = 70;
 
+    // El auto-fit no debe encuadrar el 100% de la extensión recolectada
+    // (lote + vecinos dentro de MAX_RADIUS): eso deja el lote como un punto
+    // diminuto perdido entre manzanas lejanas. Fingimos que el contenido a
+    // encuadrar es solo el 70% de su ancho/alto real, así el zoom queda más
+    // cerrado y el lote se ve prominente; el 30% más externo del contexto
+    // recolectado queda fuera del recuadro (no se recorta la recolección en
+    // sí, solo el encuadre final).
+    const CONTEXT_VISIBLE_FRACTION = 0.7;
+
     // 2. Recolectar coordenadas VÁLIDAS para el BBox
     const validCoords: [number, number][] = [...mainVertices];
     const filteredFeatures: any[] = [];
@@ -532,9 +550,11 @@ export class PlanoPerimetricoGeneratorV2 {
 
     // rawScale son mm de papel por metro real (dx_mm = dx_metros * rawScale).
     // El mínimo de los dos ejes es lo más grande que cabe sin desbordar.
+    // Se divide por CONTEXT_VISIBLE_FRACTION para encuadrar solo ese
+    // porcentaje del contenido (ver comentario junto a MAX_RADIUS).
     const rawScaleNecesaria = Math.min(
-      (drawW * marginFactor) / contentW,
-      (drawH * marginFactor) / contentH,
+      (drawW * marginFactor) / (contentW * CONTEXT_VISIBLE_FRACTION),
+      (drawH * marginFactor) / (contentH * CONTEXT_VISIBLE_FRACTION),
     );
 
     // Denominador de escala "1:N" correspondiente: N = 1000 / (mm por metro).
