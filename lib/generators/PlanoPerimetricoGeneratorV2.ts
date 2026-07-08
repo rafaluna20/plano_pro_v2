@@ -119,23 +119,28 @@ export class PlanoPerimetricoGeneratorV2 {
     // quedaba visualmente desfasado respecto a la grilla y al contexto.
     const centroUtm = calculateCentroid(utmVertices);
 
-    // ========== 5. RENDERIZADO DEL CONTEXTO (FONDO) ==========
+    // ========== 5-6. CONTEXTO + TÉCNICO (recortados al área de dibujo) ==========
+    // El contexto de vecinos (renderContext) no tiene límites propios y se
+    // dibuja a la misma escala fina del lote, así que fácilmente se sale del
+    // área de dibujo. Todo lo que sigue queda encerrado en un clip exacto a
+    // layout.drawingArea para que nada (contexto, grilla, lote) pinte fuera
+    // de su recuadro.
     const cad = new CADDrawing(pdf);
+    pdf.saveGraphicsState();
+    pdf.rect(
+      layout.drawingArea.x,
+      layout.drawingArea.y,
+      layout.drawingArea.width,
+      layout.drawingArea.height,
+      null,
+    );
+    pdf.clip();
+    pdf.discardPath();
+
+    // A. Contexto de vecinos (fondo)
     this.renderContext(
       pdf,
       cad,
-      utmVertices,
-      escalaMain.escala,
-      centerX,
-      centerY,
-    );
-
-    // ========== 6. RENDERIZADO TÉCNICO (CAPA SUPERIOR) ==========
-
-    // A. Grilla UTM
-    this.drawRealUTMGrid(
-      pdf,
-      layout.drawingArea,
       utmVertices,
       escalaMain.escala,
       centerX,
@@ -156,13 +161,26 @@ export class PlanoPerimetricoGeneratorV2 {
       fillColor: PLANO_THEME.COLORS.MAIN_LOTE_FILL, // Sombreado profesional solicitado
     });
 
-    // C. Etiqueta Central (Lote + Área + Perímetro)
+    // C. Grilla UTM: se dibuja DESPUÉS del relleno del lote para que las
+    // líneas queden al frente (antes el relleno opaco del lote las tapaba
+    // por completo en su interior) y ANTES de vértices/cotas para que esas
+    // anotaciones sigan legibles por encima de la grilla.
+    this.drawRealUTMGrid(
+      pdf,
+      layout.drawingArea,
+      utmVertices,
+      escalaMain.escala,
+      centerX,
+      centerY,
+    );
+
+    // D. Etiqueta Central (Lote + Área + Perímetro)
     this.drawPolygonCentralData(pdf, paperPoints);
 
-    // D. Datos Topográficos (Cotas con texto REGISTRAL, Vértices, Ángulos)
+    // E. Datos Topográficos (Cotas con texto REGISTRAL, Vértices, Ángulos)
     this.drawVerticesAndDimensions(pdf, paperPoints, cad);
 
-    // E. Título y Norte
+    // F. Título y Norte
     this.drawTitle(pdf, layout.drawingArea, "PLANO PERIMÉTRICO", paperPoints);
     this.drawNorthCatastro(
       pdf,
@@ -172,6 +190,8 @@ export class PlanoPerimetricoGeneratorV2 {
       layout.drawingArea.y + PLANO_THEME.NORTE.OFFSET_Y,
       PLANO_THEME.NORTE.SIZE,
     );
+
+    pdf.restoreGraphicsState();
 
     // ========== 7. COLUMNA DERECHA (Información) ==========
 
@@ -341,12 +361,15 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf.setFillColor(255, 255, 255);
     pdf.rect(drawX, drawY, drawW, drawH, "F");
 
-    // 3. Clipping area (Mascara de recorte)
+    // 3. Clipping area (Máscara de recorte)
+    // El borde visible de este recuadro ya lo dibuja drawLocationHeader();
+    // aquí el rect es solo para definir la ruta de recorte (style=null: no
+    // pinta nada), así que los vecinos/mapa no se salen de su recuadro.
     pdf.saveGraphicsState();
     try {
-      pdf.rect(drawX, drawY, drawW, drawH);
-
-      // pdf.clip();
+      pdf.rect(drawX, drawY, drawW, drawH, null);
+      pdf.clip();
+      pdf.discardPath();
 
       const modo = this.payload.configImpresion?.modoUbicacion || "vectorial";
 
@@ -1294,16 +1317,17 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
 
-    // Líneas Verticales
+    // Líneas Verticales (etiqueta ESTE en ambos extremos: abajo y arriba)
     for (let x = startX; x <= maxUtmX; x += interval) {
       const px = cx + metrosAPapel(x - centroUtm[0], escala);
       if (px > area.x && px < area.x + area.width) {
         pdf.line(px, area.y, px, area.y + area.height);
         pdf.text(x.toString(), px - 2, area.y + area.height - 2, { angle: 90 });
+        pdf.text(x.toString(), px - 2, area.y + 2, { angle: 90 });
       }
     }
 
-    // Líneas Horizontales
+    // Líneas Horizontales (etiqueta NORTE en ambos extremos: derecha e izquierda)
     for (let y = startY; y <= maxUtmY; y += interval) {
       const py = cy - metrosAPapel(y - centroUtm[1], escala);
       if (py > area.y && py < area.y + area.height) {
@@ -1311,6 +1335,7 @@ export class PlanoPerimetricoGeneratorV2 {
         pdf.text(y.toString(), area.x + area.width - 2, py - 1, {
           align: "right",
         });
+        pdf.text(y.toString(), area.x + 2, py - 1, { align: "left" });
       }
     }
 

@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
 import { calculateCentroid, utmToLatLng, getBoundingBox } from '@/lib/geometry/utmUtils';
-import { utmToPaper, utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
+import { utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { MapService } from '@/lib/services/MapService';
 
 /**
@@ -104,47 +104,44 @@ export class PlanoUbicacionGenerator {
     // Necesitamos el offset entre el centroide real y el centro del papel
     // Nota: utmToPaper usa cx, cy como el punto donde va el centroide.
 
-    // ========== 4. RENDERIZADO DEL CONTEXTO (Prioridades) ==========
-    let fondoDibujado = false;
+    // ========== 4-5. CONTEXTO + LOTE PRINCIPAL (recortados al recuadro) ==========
+    // Los vecinos vectoriales (Prioridad 1) no tienen límites propios y antes
+    // se dibujaban sin recorte, así que podían salirse del recuadro de
+    // dibujo. Todo lo que sigue queda encerrado en un clip exacto a
+    // drawingArea para que ningún elemento (contexto, grilla, lote) pinte
+    // fuera de su recuadro.
+    pdf.saveGraphicsState();
+    pdf.rect(drawingArea.x, drawingArea.y, drawingArea.width, drawingArea.height, null);
+    pdf.clip();
+    pdf.discardPath();
 
     // PRIORIDAD 1: VECTORES (Coordenadas de contexto)
     if (vecinos.length > 0) {
       // console.log('Ubicación: Prioridad 1 (Vectores)');
       this.renderVectorialContext(pdf, cad, vecinos, escala, cx, cy, centroDrawing);
-      fondoDibujado = true;
     }
     // PRIORIDAD 2: IMAGEN (Captura de Pantalla)
     else if (imagenContexto && imagenContexto.data) {
       // console.log('Ubicación: Prioridad 2 (Imagen)');
       this.renderImageContext(pdf, imagenContexto.data, drawingArea);
-      fondoDibujado = true;
     }
     // PRIORIDAD 3: MAPA SERVER (Google Static Maps)
     else {
       // console.log('Ubicación: Prioridad 3 (Mapa Server)');
       await this.renderMapServiceContext(pdf, drawingArea, vertices);
-      fondoDibujado = true;
     }
 
-    // ========== 5. RENDERIZADO LOTE PRINCIPAL (Protagonista) ==========
-    
     // Grilla (Opcional en Ubicación si hay mapa, pero técnica si es vectorial)
     // En ubicación se suele poner una grilla más espaciada (cada 100m o 50m)
     this.drawGridContext(pdf, drawingArea, 50); // Grilla visual simple
 
-    // Dibujar Lote Objetivo
-    // En planos de ubicación, el lote se suele rellenar con un "Hatch" o color sólido destacado
-    const paperPoints = utmToPaper(vertices, escala, cx, cy); // utmToPaper usa el centroide interno si no se pasa offset, ajustamos lógica abajo
-    
-    // Fix: utmToPaper necesita el centroide relativo
-    // Reimplementamos transformación local para asegurar consistencia con el contexto
-    // Fix: utmToPaper necesita el centroide relativo
-    // Reimplementamos transformación local para asegurar consistencia con el contexto
+    // Dibujar Lote Objetivo (mismo centroide que el contexto, ver
+    // utmToPaperRelative más abajo, para consistencia con renderVectorialContext)
     const fixedPaperPoints = utmToPaperRelative(vertices, centroDrawing, escala, cx, cy);
 
-    cad.drawPolygon(fixedPaperPoints, { 
-      strokeColor: '#000000', 
-      lineWidth: 0.6, 
+    cad.drawPolygon(fixedPaperPoints, {
+      strokeColor: '#000000',
+      lineWidth: 0.6,
       fillColor: '#505050' // Gris oscuro sólido para destacar ubicación
     });
 
@@ -158,6 +155,8 @@ export class PlanoUbicacionGenerator {
     pdf.setFontSize(14);
     pdf.setTextColor(0, 0, 0);
     pdf.text('ESQUEMA DE LOCALIZACIÓN', drawingArea.x + drawingArea.width / 2, drawingArea.y + 10, { align: 'center' });
+
+    pdf.restoreGraphicsState();
 
     // ========== 6. PANELES DERECHOS ==========
     this.drawGeneralData(pdf, infoArea, lote, dimensiones);
@@ -262,8 +261,15 @@ export class PlanoUbicacionGenerator {
     const w = bbox.width || 10;
     const h = bbox.height || 10;
 
-    const scaleX = (w * 1000) / availWidth;
-    const scaleY = (h * 1000) / availHeight;
+    // No se debe encuadrar el 100% del contexto recolectado (lote + todos
+    // los vecinos): eso deja el lote como un punto diminuto perdido en la
+    // manzana. Se finge que el contenido a encuadrar es solo el 70% de su
+    // extensión real, así el zoom queda más cerrado; el 30% más externo
+    // queda fuera del recuadro, recortado por el clip de generate().
+    const CONTEXT_VISIBLE_FRACTION = 0.7;
+
+    const scaleX = (w * CONTEXT_VISIBLE_FRACTION * 1000) / availWidth;
+    const scaleY = (h * CONTEXT_VISIBLE_FRACTION * 1000) / availHeight;
     const rawScale = Math.max(scaleX, scaleY);
 
     // Escalas normalizadas para Ubicación (suelen ser mayores: 500, 1000, 5000)
@@ -277,9 +283,11 @@ export class PlanoUbicacionGenerator {
     // Si hay una escala objetivo (relación lineal con el perimétrico), se
     // respeta siempre que alcance para mostrar todo el contexto; si el
     // vecindario es más denso de lo que esa relación permite, se usa la
-    // necesaria en su lugar para no romper el dibujo.
+    // necesaria en su lugar para no romper el dibujo. Se aplica la misma
+    // fracción de visibilidad para que ninguna de las dos rutas termine
+    // encuadrando el 100% del contexto.
     const finalScale = escalaObjetivo
-      ? Math.max(snapUp(escalaObjetivo), finalScaleNecesaria)
+      ? Math.max(snapUp(escalaObjetivo * CONTEXT_VISIBLE_FRACTION), finalScaleNecesaria)
       : finalScaleNecesaria;
 
     return { escala: finalScale, escalaTexto: `1/${finalScale}` };
