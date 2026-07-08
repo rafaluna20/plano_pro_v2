@@ -66,7 +66,13 @@ const MapUpdaterComponent = dynamic(
   () =>
     import("react-leaflet").then((mod) => {
       const { useMap } = mod;
-      return function MapUpdater({ center }: { center: [number, number] }) {
+      return function MapUpdater({
+        center,
+        onMapReady,
+      }: {
+        center: [number, number];
+        onMapReady?: (map: any) => void;
+      }) {
         const map = useMap();
         React.useEffect(() => {
           if (center && map) {
@@ -77,6 +83,14 @@ const MapUpdaterComponent = dynamic(
             }
           }
         }, [center, map]);
+        React.useEffect(() => {
+          if (map && onMapReady) onMapReady(map);
+          // Al desmontar (ej. al abrir el preview de PDF), limpiamos la
+          // referencia para no capturar un mapa ya destruido.
+          return () => {
+            if (onMapReady) onMapReady(null);
+          };
+        }, [map, onMapReady]);
         return null;
       };
     }),
@@ -472,6 +486,35 @@ const getCustomIcon = () => {
   });
 };
 
+/**
+ * Captura la vista actual de un mapa Leaflet como imagen base64 (PNG),
+ * en vez de depender de un servicio de mapas de terceros (Google Static
+ * Maps) para el modo "satelital" del plano de ubicación.
+ *
+ * require('leaflet') debe ejecutarse antes que el plugin: Leaflet siempre
+ * expone `window.L` como efecto secundario de cargarse (ver leaflet#2364),
+ * y leaflet-simple-map-screenshoter depende de ese global en vez de
+ * importar 'leaflet' por su cuenta.
+ */
+async function captureLeafletMap(map: any): Promise<string | null> {
+  if (typeof window === "undefined" || !map) return null;
+
+  try {
+    require("leaflet");
+    const { SimpleMapScreenshoter } = require("leaflet-simple-map-screenshoter");
+    const screenshoter = new SimpleMapScreenshoter({ hidden: true }).addTo(map);
+    try {
+      const dataUri = await screenshoter.takeScreen("image");
+      return typeof dataUri === "string" ? dataUri : null;
+    } finally {
+      screenshoter.remove();
+    }
+  } catch (error) {
+    console.error("Error capturando el mapa Leaflet:", error);
+    return null;
+  }
+}
+
 const calculateArea = (vertices: Vertice[]) => {
   if (!vertices || vertices.length < 3) return 0;
   let area = 0;
@@ -613,6 +656,9 @@ export default function EditorPlanos() {
     null,
   );
   const svgRef = useRef<SVGSVGElement>(null);
+  // Instancia viva del mapa Leaflet (modo satelital), usada para capturar una
+  // imagen de la vista actual en vez de depender de Google Static Maps.
+  const leafletMapRef = useRef<any>(null);
 
   // Estados para Drag & Drop de Vista Imagen
   const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 });
@@ -1247,6 +1293,35 @@ export default function EditorPlanos() {
     }));
   };
 
+  /**
+   * Alterna el visor de PDF. Si el modo de ubicación es "satelital", captura
+   * el mapa Leaflet ANTES de esconderlo (al mostrar el preview se desmonta
+   * el <MapContainer> en vivo, así que después ya no habría nada que
+   * capturar) y guarda esa imagen en satelliteUrl para que la use tanto el
+   * preview como la impresión nativa.
+   */
+  const handleTogglePDFViewer = async () => {
+    if (!showPDFViewer && data.config.modoUbicacion === "satelital") {
+      if (!leafletMapRef.current) {
+        toast.error(
+          "Espera a que cargue el mapa satelital antes de ver el preview",
+        );
+        return;
+      }
+      const loadingToast = toast.loading("Capturando vista del mapa...");
+      const captured = await captureLeafletMap(leafletMapRef.current);
+      toast.dismiss(loadingToast);
+      if (!captured) {
+        toast.error(
+          "No se pudo capturar el mapa. Intenta de nuevo o cambia a modo Vectorial.",
+        );
+        return;
+      }
+      setSatelliteUrl(captured);
+    }
+    setShowPDFViewer(!showPDFViewer);
+  };
+
   const handlePrintPDF = async () => {
     if (data.vertices.length < 3) {
       toast.error("Se requieren al menos 3 vértices para generar el PDF");
@@ -1256,6 +1331,26 @@ export default function EditorPlanos() {
     if (!token) {
       toast.error("Debes iniciar sesión para generar el PDF");
       return;
+    }
+
+    // Modo satelital: capturamos el mapa Leaflet en este momento si está
+    // montado (vista en vivo); si no (ej. ya se abrió el preview de PDF
+    // antes), reusamos la última captura guardada en satelliteUrl.
+    let satelliteUrlToSend = satelliteUrl;
+    if (data.config.modoUbicacion === "satelital") {
+      if (leafletMapRef.current) {
+        const captured = await captureLeafletMap(leafletMapRef.current);
+        if (captured) {
+          satelliteUrlToSend = captured;
+          setSatelliteUrl(captured);
+        }
+      }
+      if (!satelliteUrlToSend) {
+        toast.error(
+          "No hay una captura del mapa satelital. Ábrelo (vista o preview) e intenta de nuevo.",
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -1270,7 +1365,7 @@ export default function EditorPlanos() {
         },
         body: JSON.stringify({
           ...data,
-          satelliteUrl,
+          satelliteUrl: satelliteUrlToSend,
         }),
       });
 
@@ -1592,7 +1687,7 @@ export default function EditorPlanos() {
               <PenTool size={16} /> CAD Pro
             </button>
             <button
-              onClick={() => setShowPDFViewer(!showPDFViewer)}
+              onClick={handleTogglePDFViewer}
               className={`px-4 py-2 text-sm font-medium text-white ${showPDFViewer ? "bg-orange-600 hover:bg-orange-700" : "bg-green-600 hover:bg-green-700"} rounded-lg shadow-md flex items-center gap-2 transition-transform active:scale-95`}
             >
               {showPDFViewer ? (
@@ -2195,12 +2290,9 @@ export default function EditorPlanos() {
                       modoUbicacion={data.config.modoUbicacion}
                       imagenGeneral={data.imagenGeneral}
                       logoUrl={data.logoUrl}
-                      latLngs={
-                        previewData?.leaflet.polygon as Array<[number, number]>
-                      }
+                      satelliteUrl={satelliteUrl}
                       adyacentes={previewData?.adyacentes}
                       contexto={data.contexto}
-                      onSatelliteLoaded={setSatelliteUrl}
                     />
                   </div>
                 ) : data.config.modoUbicacion === "imagen" &&
@@ -2287,6 +2379,9 @@ export default function EditorPlanos() {
                       />
                       <MapUpdaterComponent
                         center={previewData.leaflet.center as any}
+                        onMapReady={(map) => {
+                          leafletMapRef.current = map;
+                        }}
                       />
                       {previewData.adyacentes.map((ady, idx) => (
                         <Polygon
