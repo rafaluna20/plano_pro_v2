@@ -175,7 +175,7 @@ export class PlanoUbicacionGenerator {
     this.drawMacrolocalization(pdf, macroArea);
 
     // Membrete
-    this.drawProfessionalMembrete(pdf, membreteArea, lote, dimensiones, escalaTexto, propietario);
+    await this.drawProfessionalMembrete(pdf, membreteArea, lote, dimensiones, escalaTexto, propietario);
   }
 
   // ===========================================================================
@@ -426,22 +426,55 @@ export class PlanoUbicacionGenerator {
     pdf.circle(x + width/2 + 5, y + height/2, 2, 'F');
   }
 
-  private drawProfessionalMembrete(pdf: jsPDF, area: any, lote: any, dimensiones: any, escala: string, prop: any) {
+  private async drawProfessionalMembrete(pdf: jsPDF, area: any, lote: any, dimensiones: any, escala: string, prop: any): Promise<void> {
     const { x, y, width: w, height: h } = area;
-    pdf.setDrawColor(0); 
-    pdf.setLineWidth(0.5); 
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(0.5);
     pdf.rect(x, y, w, h);
-    
+
     const leftW = w * 0.4; // Logo área
     pdf.line(x + leftW, y, x + leftW, y + h);
 
-    // LOGO
-    pdf.setTextColor(0); 
-    pdf.setFontSize(16); 
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('PLANO', x + leftW/2, y + 20, { align: 'center' });
-    pdf.text('UBICACIÓN', x + leftW/2, y + 28, { align: 'center' });
+    // LOGO: imagen real si config.logoUrl está seteado (default: logo de
+    // Akallpa, ver PlanoRequestAdapter.mapConfig), con el mismo patrón de
+    // fetch + fallback que ya usa PlanoPerimetricoGeneratorV2.
+    const logoUrl = (this.config as any)?.logoUrl;
+    let logoDrawn = false;
+    if (logoUrl) {
+      try {
+        const res = await fetch(logoUrl);
+        if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+        const buffer = await res.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        const contentType = res.headers.get('content-type') || '';
+        const format = contentType.includes('png') ? 'PNG' : 'JPEG';
+        const logoSize = Math.min(leftW - 10, 30);
+        pdf.addImage(
+          data,
+          format,
+          x + leftW / 2 - logoSize / 2,
+          y + 5,
+          logoSize,
+          logoSize,
+          undefined,
+          'FAST',
+        );
+        logoDrawn = true;
+      } catch (err) {
+        console.warn('Fallo al cargar logoUrl en PlanoUbicacion:', err);
+      }
+    }
+
+    pdf.setTextColor(0);
+    if (!logoDrawn) {
+      // Fallback: mismo texto de siempre si no hay logo o falló la carga.
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('PLANO', x + leftW / 2, y + 20, { align: 'center' });
+      pdf.text('UBICACIÓN', x + leftW / 2, y + 28, { align: 'center' });
+    }
     pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'bold');
     pdf.text('TERRA LIMA', x + leftW/2, y + 55, { align: 'center' });
 
     // INFO

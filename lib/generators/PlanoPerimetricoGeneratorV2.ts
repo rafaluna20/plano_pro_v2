@@ -712,9 +712,11 @@ export class PlanoPerimetricoGeneratorV2 {
       pdf.setFillColor(0, 0, 0);
       pdf.circle(leaderStartX, leaderStartY, 0.4, "F");
 
-      // Fondo blanco bajo la etiqueta para que se lea encima del contexto
+      // Fondo blanco con borde bajo la etiqueta para que se lea encima del contexto
       pdf.setFillColor(255, 255, 255);
-      pdf.rect(labelX - 1, labelY - 3.3, labelWidth + 2, 4.3, "F");
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
+      pdf.rect(labelX - 1, labelY - 3.3, labelWidth + 2, 4.3, "FD");
       pdf.setTextColor(0);
       pdf.text(labelText, labelX, labelY, { align: "left" });
     }
@@ -1525,6 +1527,8 @@ export class PlanoPerimetricoGeneratorV2 {
     }
 
     pdf.setFillColor(255, 255, 255);
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     const fontSize = PLANO_THEME.FONTS.SIZES.H1;
     const titleWidth =
       (pdf.getStringUnitWidth(title) * fontSize) / pdf.internal.scaleFactor;
@@ -1533,7 +1537,7 @@ export class PlanoPerimetricoGeneratorV2 {
       titleY - TITULO.PADDING_V,
       titleWidth + TITULO.PADDING_H * 2,
       TITULO.BOX_HEIGHT,
-      "F",
+      "FD",
     );
 
     pdf.setFontSize(fontSize);

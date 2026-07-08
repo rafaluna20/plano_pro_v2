@@ -14,6 +14,11 @@ import {
 } from '@/types/PlanosPayload';
 import { DEFAULT_UTM_ZONE } from '@/lib/geometry/utmUtils';
 
+// Logo por defecto (Akallpa) para el membrete, si el caller no manda uno
+// propio en config.logoUrl. Subido a Vercel Blob (mismo storage que usan
+// los PDFs generados) para tener una URL pública permanente.
+const DEFAULT_LOGO_URL = 'https://uaqvcyzkl4dd5hx4.public.blob.vercel-storage.com/branding/logo-akallpa.png';
+
 /**
  * Adaptador para transformar solicitudes legacy (V1) al nuevo formato híbrido (V2).
  * Permite usar el motor V2 sin romper la compatibilidad con el frontend existente.
@@ -167,6 +172,7 @@ export class PlanoRequestAdapter {
             formatoPapel: config?.formatoPapel || 'A3',
             orientacion: config?.orientacion || 'landscape',
             escala: config?.escala || null,
+            logoUrl: config?.logoUrl || DEFAULT_LOGO_URL,
             estilos: {
                 mostrarCotas: true,
                 mostrarGrilla: true,

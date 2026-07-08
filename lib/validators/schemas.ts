@@ -71,6 +71,7 @@ export const planoConfigSchema = z.object({
   orientacion: z.enum(['portrait', 'landscape']).default('portrait'),
   escala: z.string().optional(),
   incluirColindantesEnPlano: z.boolean().default(true),
+  logoUrl: z.string().url().optional(),
 });
 
 // Lote Vecino

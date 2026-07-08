@@ -61,6 +61,9 @@ export interface PlanoConfig {
   orientacion?: 'portrait' | 'landscape';
   escala?: string;
   incluirColindantesEnPlano: boolean;
+  // URL pública (PNG/JPG) del logo a mostrar en el membrete. Si se omite,
+  // PlanoRequestAdapter usa el logo por defecto de Akallpa.
+  logoUrl?: string;
   formatosPersonalizados?: {
     memoriaDescriptiva?: {
       formato: 'A4' | 'A3' | 'A2' | 'Legal';
