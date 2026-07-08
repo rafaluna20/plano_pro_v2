@@ -1051,9 +1051,49 @@ export class PlanoPerimetricoGeneratorV2 {
 
       // 2. Dibujar Vértice
       cad.drawCircle(p[0], p[1], 0.8, { fillColor: PLANO_THEME.COLORS.WHITE });
+
+      // Dirección hacia el EXTERIOR del lote en este vértice: la suma de los
+      // vectores unitarios hacia los dos vecinos siempre bisecta el ángulo
+      // que forman (geometría vectorial básica). Si el vértice es convexo
+      // (ángulo interno <=180°) esa bisectriz apunta hacia ADENTRO del lote,
+      // así que se invierte; si es cóncavo/reflejo (>180°) la bisectriz ya
+      // apunta hacia afuera (hacia la "muesca"), sin invertir. Con esto la
+      // etiqueta "V{n}" queda fuera del lote sin importar la forma —
+      // convexa, cóncava, o el offset fijo anterior (+2,-2) que a veces
+      // caía adentro del relleno gris según la geometría.
+      const toPrevX = prev[0] - p[0];
+      const toPrevY = prev[1] - p[1];
+      const toNextX = next[0] - p[0];
+      const toNextY = next[1] - p[1];
+      const lenPrev = Math.sqrt(toPrevX ** 2 + toPrevY ** 2) || 1;
+      const lenNext = Math.sqrt(toNextX ** 2 + toNextY ** 2) || 1;
+      const sumX = toPrevX / lenPrev + toNextX / lenNext;
+      const sumY = toPrevY / lenPrev + toNextY / lenNext;
+      const sumLen = Math.sqrt(sumX ** 2 + sumY ** 2);
+
+      let outX: number;
+      let outY: number;
+      if (sumLen < 1e-6) {
+        // Caso degenerado: vértice casi colineal con sus vecinos (raro en
+        // lotes reales, ej. un vértice redundante en un lado recto). Se usa
+        // la perpendicular del lado siguiente como respaldo.
+        outX = -toNextY / lenNext;
+        outY = toNextX / lenNext;
+      } else {
+        const sign = computedAngle <= 180 ? -1 : 1;
+        outX = (sign * sumX) / sumLen;
+        outY = (sign * sumY) / sumLen;
+      }
+
+      const labelOffset = 3; // mm desde el vértice
       pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
       pdf.setTextColor(0);
-      pdf.text(`V${i + 1}`, p[0] + 2, p[1] - 2);
+      pdf.text(
+        `V${i + 1}`,
+        p[0] + outX * labelOffset,
+        p[1] + outY * labelOffset,
+        { align: "center", baseline: "middle" },
+      );
     });
 
     // Cotas (dimensiones) - USANDO longitudTexto REGISTRAL, orientadas en la
@@ -1106,13 +1146,28 @@ export class PlanoPerimetricoGeneratorV2 {
           lineWidth: 0.01,
         });
 
+        // NI align:"center" NI baseline:"middle" de jsPDF son seguros de usar
+        // junto con angle: ambos calculan su desplazamiento sobre los ejes
+        // ORIGINALES (mundo X para align, eje Y original para baseline)
+        // ANTES de aplicar la matriz de rotación — no la giran junto con el
+        // texto. Confirmado en el código fuente de jsPDF (align: "x -=
+        // lineWidths[0] / 2" corre antes de construir la matriz de ángulo).
+        // El error resultante crece con el ángulo (era de ~4mm en lados a
+        // 75°, ~1mm en lados a 15°) — por eso se calculan ambos
+        // desplazamientos a mano, ya proyectados sobre la dirección real
+        // (adelante/perpendicular) del texto rotado, y se llama a text() sin
+        // align/baseline (default "left"/"alphabetic" con el ancla
+        // ya pre-corrida).
+        const fontHeightMm =
+          PLANO_THEME.FONTS.SIZES.SMALL / pdf.internal.scaleFactor;
+        const middleOffset = fontHeightMm * 0.35; // height/2 - height*0.15 (lineHeightFactor=1.15)
+        const halfWidth = textWidth / 2;
+        const anchorX = mx + fperpX * middleOffset - fux * halfWidth;
+        const anchorY = my + fperpY * middleOffset - fuy * halfWidth;
+
         pdf.setTextColor(0);
         // ⭐ USAR longitudTexto del registro, NO calcular
-        pdf.text(textStr, mx, my, {
-          align: "center",
-          baseline: "middle",
-          angle: angleDeg,
-        });
+        pdf.text(textStr, anchorX, anchorY, { angle: angleDeg });
       },
     );
   }
