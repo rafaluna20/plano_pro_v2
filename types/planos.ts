@@ -45,6 +45,11 @@ export interface LoteMetadata {
     distrito?: string;
     urbanizacion?: string;
     direccion?: string;
+    // Zona UTM (17|18|19, hemisferio sur): Perú completo no cabe en una
+    // sola zona. Si se omite, se asume 18 (ver DEFAULT_UTM_ZONE en
+    // lib/geometry/utmUtils.ts) — correcto para Lima, incorrecto para
+    // proyectos en el extremo norte o sur del país.
+    zonaUTM?: number;
   };
 }
 

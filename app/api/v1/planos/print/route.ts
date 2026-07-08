@@ -5,11 +5,13 @@ import React from "react";
 import proj4 from "proj4";
 import { MapService } from "@/lib/services/MapService";
 import { verifyToken, extractTokenFromHeader } from "@/lib/auth/jwt";
+import { getUtmProjString, DEFAULT_UTM_ZONE } from "@/lib/geometry/utmUtils";
 
 export const dynamic = "force-dynamic";
 
 const WGS84 = "EPSG:4326";
-const UTM_18S = "+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs";
+// Zona UTM centralizada en lib/geometry/utmUtils.ts (única fuente de verdad).
+const UTM_18S = getUtmProjString(DEFAULT_UTM_ZONE);
 
 export async function POST(req: Request) {
   try {

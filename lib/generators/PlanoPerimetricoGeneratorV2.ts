@@ -23,6 +23,7 @@ import {
   calculateCentroid,
   utmToLatLng,
   calculateInteriorAngles,
+  DEFAULT_UTM_ZONE,
 } from "@/lib/geometry/utmUtils";
 import { MapService } from "@/lib/services/MapService";
 import { PLANO_THEME, getGridInterval } from "@/lib/config/PlanoTheme";
@@ -67,6 +68,17 @@ export class PlanoPerimetricoGeneratorV2 {
    */
   getEscalaUtilizada(): number | null {
     return this.escalaUtilizada;
+  }
+
+  /**
+   * Zona UTM (17/18/19, hemisferio sur) del lote. Cae a DEFAULT_UTM_ZONE
+   * (18, Lima) si el payload no la especifica — correcto para el tráfico
+   * actual, pero un proyecto fuera de esa zona necesita mandarla explícita
+   * en lote.ubicacion.zonaUTM para que el mapa satelital y las coordenadas
+   * lat/lng mostradas no salgan desplazadas.
+   */
+  private getZonaUTM(): number {
+    return this.payload.loteObjetivo.properties.ubicacion?.zonaUTM ?? DEFAULT_UTM_ZONE;
   }
 
   constructor(payload: PlanoPayloadHibrido, datosProcesados: DatosProcesados) {
@@ -375,13 +387,14 @@ export class PlanoPerimetricoGeneratorV2 {
 
       if (modo === "satelital") {
         try {
-          const latLngs = mainVertices.map((v) => utmToLatLng(v));
+          const zonaUTM = this.getZonaUTM();
+          const latLngs = mainVertices.map((v) => utmToLatLng(v, zonaUTM));
           const adjacentPolys: [number, number][][] = [];
           this.payload.contexto.features.forEach((f) => {
             if (f.properties.tipo === "lote" && f.geometry.type === "Polygon") {
               adjacentPolys.push(
                 (f.geometry.coordinates[0] as [number, number][]).map((v) =>
-                  utmToLatLng(v),
+                  utmToLatLng(v, zonaUTM),
                 ),
               );
             }
@@ -524,25 +537,21 @@ export class PlanoPerimetricoGeneratorV2 {
   ): void {
     const { UBICACION } = PLANO_THEME;
 
-    // 1. Centroide del Lote Principal (Ancla para filtrado)
-    const centroIdLote = calculateCentroid(mainVertices);
-    // El croquis es un thumbnail de orientación rápida (recuadro de ~85x60mm
-    // útiles), no el plano de ubicación detallado — usa un radio propio,
-    // independiente del radio de contexto principal (200m), para que siempre
-    // quede legible sin importar cuántos vecinos se hayan calculado para el
-    // resto del expediente.
-    const MAX_RADIUS = 70;
-
     // El auto-fit no debe encuadrar el 100% de la extensión recolectada
-    // (lote + vecinos dentro de MAX_RADIUS): eso deja el lote como un punto
+    // (lote + todos los vecinos del payload): eso deja el lote como un punto
     // diminuto perdido entre manzanas lejanas. Fingimos que el contenido a
     // encuadrar es solo el 70% de su ancho/alto real, así el zoom queda más
     // cerrado y el lote se ve prominente; el 30% más externo del contexto
-    // recolectado queda fuera del recuadro (no se recorta la recolección en
-    // sí, solo el encuadre final).
+    // recolectado queda fuera del recuadro (el clip de drawLocationPlanAutoScale
+    // ya se encarga de recortarlo limpiamente, no hace falta filtrar antes).
     const CONTEXT_VISIBLE_FRACTION = 0.7;
 
-    // 2. Recolectar coordenadas VÁLIDAS para el BBox
+    // 2. Recolectar coordenadas para el BBox: TODOS los vecinos del payload,
+    // sin filtro de radio propio. Antes había un MAX_RADIUS=70m hardcodeado
+    // aquí que descartaba vecinos antes de dibujarlos, aunque el resto del
+    // documento (renderContext del plano principal, PlanoUbicacion.ts) sí
+    // los muestra — el radio real de contexto lo decide quien arma el
+    // payload (mapa_renasur), no este thumbnail.
     const validCoords: [number, number][] = [...mainVertices];
     const filteredFeatures: any[] = [];
 
@@ -550,17 +559,8 @@ export class PlanoPerimetricoGeneratorV2 {
       this.payload.contexto.features.forEach((f) => {
         if (f.geometry.type === "Polygon") {
           const coords = f.geometry.coordinates[0] as [number, number][];
-          // Verificar si el polígono está dentro del radio de interés
-          const centerF = calculateCentroid(coords);
-          const dist = Math.sqrt(
-            Math.pow(centerF[0] - centroIdLote[0], 2) +
-              Math.pow(centerF[1] - centroIdLote[1], 2),
-          );
-
-          if (dist < MAX_RADIUS) {
-            validCoords.push(...coords);
-            filteredFeatures.push(f);
-          }
+          validCoords.push(...coords);
+          filteredFeatures.push(f);
         }
       });
     }

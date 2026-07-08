@@ -2,7 +2,7 @@
 import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
-import { calculateCentroid, utmToLatLng, getBoundingBox } from '@/lib/geometry/utmUtils';
+import { calculateCentroid, utmToLatLng, getBoundingBox, DEFAULT_UTM_ZONE } from '@/lib/geometry/utmUtils';
 import { utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { MapService } from '@/lib/services/MapService';
 
@@ -26,6 +26,14 @@ export class PlanoUbicacionGenerator {
     private perimetricoSource?: PerimetricoScaleSource,
   ) {
     this.request = request;
+  }
+
+  /**
+   * Zona UTM (17/18/19, hemisferio sur) del lote. Cae a DEFAULT_UTM_ZONE
+   * (18, Lima) si el request no la especifica.
+   */
+  private getZonaUTM(): number {
+    return (this.request as any).lote?.ubicacion?.zonaUTM ?? DEFAULT_UTM_ZONE;
   }
 
   async generate(pdf: jsPDF): Promise<void> {
@@ -232,7 +240,7 @@ export class PlanoUbicacionGenerator {
   /** PRIORIDAD 3: Mapa Server */
   private async renderMapServiceContext(pdf: jsPDF, area: any, vertices: [number, number][]) {
     try {
-      const latLngs = vertices.map(v => utmToLatLng(v));
+      const latLngs = vertices.map(v => utmToLatLng(v, this.getZonaUTM()));
       // Zoom 17 o 18 es bueno para Ubicación (un poco más alejado que Perimétrico)
       const mapImage = await MapService.getStaticMapWithPolygon(latLngs, 800, 800, 17);
       if (mapImage) {
@@ -263,10 +271,10 @@ export class PlanoUbicacionGenerator {
 
     // No se debe encuadrar el 100% del contexto recolectado (lote + todos
     // los vecinos): eso deja el lote como un punto diminuto perdido en la
-    // manzana. Se finge que el contenido a encuadrar es solo el 70% de su
-    // extensión real, así el zoom queda más cerrado; el 30% más externo
+    // manzana. Se finge que el contenido a encuadrar es solo el 50% de su
+    // extensión real, así el zoom queda más cerrado; el 50% más externo
     // queda fuera del recuadro, recortado por el clip de generate().
-    const CONTEXT_VISIBLE_FRACTION = 0.7;
+    const CONTEXT_VISIBLE_FRACTION = 0.5;
 
     const scaleX = (w * CONTEXT_VISIBLE_FRACTION * 1000) / availWidth;
     const scaleY = (h * CONTEXT_VISIBLE_FRACTION * 1000) / availHeight;
@@ -333,8 +341,8 @@ export class PlanoUbicacionGenerator {
     pdf.setFontSize(8);
     
     const items = [
-      { l: 'Departamento:', v: lote.ubicacion?.departamento || 'Lima' },
-      { l: 'Provincia:', v: lote.ubicacion?.provincia || 'Lima' },
+      { l: 'Departamento:', v: lote.ubicacion?.departamento || '---' },
+      { l: 'Provincia:', v: lote.ubicacion?.provincia || '---' },
       { l: 'Distrito:', v: lote.ubicacion?.distrito || '---' },
       { l: 'Urbanización:', v: lote.ubicacion?.urbanizacion || '---' },
       { l: 'Manzana:', v: lote.manzana || '---' },
@@ -357,27 +365,28 @@ export class PlanoUbicacionGenerator {
   }
 
   private drawCentroidTable(pdf: jsPDF, area: any, vertices: [number, number][]) {
+    const zonaUTM = this.getZonaUTM();
     const centroid = calculateCentroid(vertices);
-    const [lat, lng] = utmToLatLng(centroid);
+    const [lat, lng] = utmToLatLng(centroid, zonaUTM);
     const { x, y, width } = area;
     let currY = y;
 
-    pdf.setFillColor(50, 50, 50); 
+    pdf.setFillColor(50, 50, 50);
     pdf.rect(x, currY, width, 8, 'F');
     pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(9); 
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
     pdf.text('COORDENADAS CENTROIDE', x + width / 2, currY + 5, { align: 'center' });
     currY += 12;
-    
-    pdf.setTextColor(0); 
+
+    pdf.setTextColor(0);
     pdf.setFontSize(8);
-    
+
     // Fila 1: UTM
     pdf.setFillColor(240, 240, 240);
     pdf.rect(x, currY - 4, width, 14, 'F');
-    pdf.setFont('helvetica', 'bold'); 
-    pdf.text('SISTEMA WGS84 - ZONA 18S', x + width/2, currY, {align:'center'});
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`SISTEMA WGS84 - ZONA ${zonaUTM}S`, x + width/2, currY, {align:'center'});
     
     currY += 6;
     pdf.setFont('helvetica', 'bold'); pdf.text('ESTE (X):', x + 5, currY);

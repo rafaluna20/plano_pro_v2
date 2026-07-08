@@ -1,7 +1,16 @@
 import { z } from 'zod';
+import { UTM_ZONES } from '@/lib/constants/plano';
 
 // Coordenada UTM
 export const utmCoordinateSchema = z.tuple([z.number(), z.number()]);
+
+// Zona UTM válida para Perú (17S/18S/19S, hemisferio sur). Si se omite, los
+// generadores asumen 18 (lib/geometry/utmUtils.ts DEFAULT_UTM_ZONE).
+export const zonaUTMSchema = z.union([
+  z.literal(UTM_ZONES.PERU_NORTH),
+  z.literal(UTM_ZONES.PERU_CENTER),
+  z.literal(UTM_ZONES.PERU_SOUTH),
+]);
 
 // Colindancia
 export const colindanciaSchema = z.object({
@@ -49,6 +58,7 @@ export const loteMetadataSchema = z.object({
     distrito: z.string().optional(),
     urbanizacion: z.string().optional(),
     direccion: z.string().optional(),
+    zonaUTM: zonaUTMSchema.optional(),
   }).optional(),
 });
 

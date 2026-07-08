@@ -5,10 +5,12 @@
  */
 
 import proj4 from "proj4";
+import { getUtmProjString, DEFAULT_UTM_ZONE } from "@/lib/geometry/utmUtils";
 
 // ─── Proyecciones ────────────────────────────────────────────────────────────
+// Zona UTM centralizada en lib/geometry/utmUtils.ts (única fuente de verdad).
 export const WGS84 = "EPSG:4326";
-export const UTM_18S = "+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs";
+export const UTM_18S = getUtmProjString(DEFAULT_UTM_ZONE);
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface Vertice {
@@ -80,9 +82,9 @@ export const calcularCentroide = (
 };
 
 // ─── Conversión UTM → LatLng (para Leaflet) ───────────────────────────────
-export const utmToLatLng = (x: number, y: number): [number, number] => {
+export const utmToLatLng = (x: number, y: number, zone: number = DEFAULT_UTM_ZONE): [number, number] => {
   try {
-    const [lng, lat] = proj4(UTM_18S, WGS84, [x, y]);
+    const [lng, lat] = proj4(getUtmProjString(zone), WGS84, [x, y]);
     if (isNaN(lat) || isNaN(lng)) return [0, 0];
     return [lat, lng];
   } catch {
@@ -91,9 +93,9 @@ export const utmToLatLng = (x: number, y: number): [number, number] => {
 };
 
 // ─── Conversión LatLng → UTM ─────────────────────────────────────────────
-export const latLngToUtm = (lat: number, lng: number): [number, number] => {
+export const latLngToUtm = (lat: number, lng: number, zone: number = DEFAULT_UTM_ZONE): [number, number] => {
   try {
-    const [x, y] = proj4(WGS84, UTM_18S, [lng, lat]);
+    const [x, y] = proj4(WGS84, getUtmProjString(zone), [lng, lat]);
     return [x, y];
   } catch {
     return [0, 0];

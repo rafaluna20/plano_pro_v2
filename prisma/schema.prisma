@@ -77,7 +77,14 @@ model Plano {
   manzana       String
   etapa         String
   numeroLote    String
-  
+
+  // Ubicación administrativa (departamento/provincia/distrito/direccion/zonaUTM).
+  // Antes solo vivía de paso en el job de Redis durante la generación y se
+  // descartaba — no había forma de auditar qué ubicación se usó en un plano
+  // ya generado. Nullable porque los registros previos a este campo no la
+  // tienen.
+  ubicacion     Json?
+
   // --- Geometría y Datos Técnicos (JSON) ---
   vertices      Json                 // Array de coordenadas [x, y]
   dimensiones   Json                 // Objeto con {frente, fondo, area, perimetro...}

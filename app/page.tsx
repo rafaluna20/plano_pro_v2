@@ -35,6 +35,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import proj4 from "proj4";
 import { Toaster, toast } from "react-hot-toast";
 import { UTMCoordinate } from "@/types/planos";
+import { getUtmProjString, DEFAULT_UTM_ZONE } from "@/lib/geometry/utmUtils";
 
 const LocationMap = dynamic(() => import("@/components/editor/LocationMap"), {
   ssr: false,
@@ -98,8 +99,9 @@ const MapUpdaterComponent = dynamic(
 );
 
 // --- CONFIGURACIÓN DE PROYECCIONES ---
+// Zona UTM centralizada en lib/geometry/utmUtils.ts (única fuente de verdad).
 const WGS84 = "EPSG:4326";
-const UTM_18S = "+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs";
+const UTM_18S = getUtmProjString(DEFAULT_UTM_ZONE);
 
 // --- TIPOS DE DATOS ---
 interface Vertice {
@@ -527,9 +529,9 @@ const calculateArea = (vertices: Vertice[]) => {
 };
 
 // Conversión UTM -> LatLng para Leaflet
-const utmToLatLng = (x: number, y: number): [number, number] => {
+const utmToLatLng = (x: number, y: number, zone: number = DEFAULT_UTM_ZONE): [number, number] => {
   try {
-    const [lng, lat] = proj4(UTM_18S, WGS84, [x, y]);
+    const [lng, lat] = proj4(getUtmProjString(zone), WGS84, [x, y]);
     if (isNaN(lat) || isNaN(lng)) return [0, 0];
     return [lat, lng];
   } catch (e) {

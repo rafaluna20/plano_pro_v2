@@ -2,6 +2,8 @@
  * Constantes de configuración para el editor de planos
  */
 
+import { getUtmProjString } from '@/lib/geometry/utmUtils';
+
 export const PLANO_CONFIG = {
   // Configuración del canvas SVG
   CANVAS: {
@@ -74,10 +76,10 @@ export const PLANO_CONFIG = {
     DEBOUNCE_MS: 500,
   },
 
-  // Proyecciones
+  // Proyecciones (zona centralizada en lib/geometry/utmUtils.ts)
   PROJECTIONS: {
     WGS84: 'EPSG:4326',
-    UTM_18S: '+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs',
+    UTM_18S: getUtmProjString(18),
   },
 
   // Colores

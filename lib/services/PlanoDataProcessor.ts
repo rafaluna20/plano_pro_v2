@@ -94,6 +94,7 @@ interface SegmentoCalculado {
 export class PlanoDataProcessor {
   private payload: PlanoPayloadHibrido;
   private warnings: string[] = [];
+  private ubicacionIncompleta = false;
 
   constructor(payload: PlanoPayloadHibrido) {
     this.payload = payload;
@@ -130,7 +131,7 @@ export class PlanoDataProcessor {
       perimetroFinal,
       linderosFinal,
       flags: {
-        requiresReview: discrepancias.requiresReview,
+        requiresReview: discrepancias.requiresReview || this.ubicacionIncompleta,
         fuenteArea: this.payload.datosRegistrales.areaOficial !== null ? 'REGISTRAL' : 'CALCULADO',
         fuentePerimetro: this.payload.datosRegistrales.perimetroOficial !== null ? 'REGISTRAL' : 'CALCULADO',
         fuenteLinderos: this.determineFuenteLinderos(),
@@ -177,6 +178,24 @@ export class PlanoDataProcessor {
         // Forzar recálculo
         this.payload.datosRegistrales.linderos = null;
       }
+    }
+
+    // Ubicación administrativa incompleta: PlanoRequestAdapter y los
+    // generadores ya NO sustituyen departamento/provincia/distrito faltantes
+    // por 'Lima' en silencio (ver commit de este fix) — en vez de eso, un
+    // dato faltante debe marcar el documento para revisión manual, no pasar
+    // desapercibido con una ciudad inventada.
+    const ubicacion = loteObjetivo.properties?.ubicacion;
+    const PLACEHOLDER = '---';
+    const camposFaltantes = (['departamento', 'provincia', 'distrito'] as const).filter(
+      (campo) => !ubicacion?.[campo] || ubicacion[campo] === PLACEHOLDER,
+    );
+
+    if (camposFaltantes.length > 0) {
+      this.warnings.push(
+        `ADVERTENCIA: Ubicación administrativa incompleta (falta: ${camposFaltantes.join(', ')}). Verificar antes de emitir el documento.`,
+      );
+      this.ubicacionIncompleta = true;
     }
   }
 

@@ -108,6 +108,10 @@ export interface UbicacionAdministrativa {
   provincia: string;
   distrito: string;
   direccion?: string;
+  // Zona UTM (17|18|19, hemisferio sur). Si se omite, los generadores usan
+  // DEFAULT_UTM_ZONE (18, lib/geometry/utmUtils.ts) — correcto para Lima,
+  // incorrecto para proyectos en el extremo norte o sur de Perú.
+  zonaUTM?: number;
 }
 
 /**

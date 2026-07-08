@@ -49,7 +49,13 @@ export async function POST(request: NextRequest) {
         manzana: payload.lote.manzana,
         etapa: payload.lote.etapa,
         numeroLote: payload.lote.numeroLote,
-        
+
+        // Ubicación administrativa (departamento/provincia/distrito/zonaUTM).
+        // Antes no se guardaba en ningún lado: solo vivía de paso en el job
+        // de Redis durante la generación y se perdía después, sin forma de
+        // auditar qué ubicación se usó en un plano ya generado.
+        ubicacion: payload.lote.ubicacion ? (payload.lote.ubicacion as any) : null,
+
         // Guardamos la geometría principal y metadatos
         vertices: payload.vertices as any,
         dimensiones: payload.dimensiones as any,

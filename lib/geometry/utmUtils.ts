@@ -1,15 +1,36 @@
 import proj4 from 'proj4';
 import { UTMCoordinate } from '@/types/planos';
 
-// Definir proyección UTM Zone 18S (Perú)
 const WGS84 = 'EPSG:4326'; // Lat/Lng
-const UTM_18S = '+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs';
+
+/**
+ * Zona UTM por defecto. Perú completo abarca las zonas 17S (extremo norte,
+ * ej. Tumbes/Piura), 18S (la gran mayoría del país, incluye Lima) y 19S
+ * (extremo sur, ej. Tacna) — todas en el hemisferio sur. 18 cubre el 100%
+ * del tráfico actual (proyectos en Lima), por eso es el default seguro
+ * para no romper compatibilidad con payloads que no especifiquen zona.
+ */
+export const DEFAULT_UTM_ZONE = 18;
+
+/**
+ * Construye el string proj4 para una zona UTM del hemisferio sur peruano.
+ *
+ * Única fuente de verdad para esta proyección: antes esta misma cadena
+ * vivía copiada de forma independiente y fija en zona 18 en 5 archivos
+ * (aquí, lib/constants/plano.ts, app/api/v1/planos/print/route.ts,
+ * app/page.tsx, app/utils/geometry.ts) — cualquier proyecto fuera de zona
+ * 18S habría requerido editar los 5 en paralelo, y encima ninguno lo
+ * permitía parametrizar. Ahora todos importan esta función.
+ */
+export function getUtmProjString(zone: number = DEFAULT_UTM_ZONE): string {
+  return `+proj=utm +zone=${zone} +south +datum=WGS84 +units=m +no_defs`;
+}
 
 /**
  * Convierte coordenadas UTM a Lat/Lng
  */
-export function utmToLatLng(utm: UTMCoordinate): [number, number] {
-  const [lng, lat] = proj4(UTM_18S, WGS84, utm);
+export function utmToLatLng(utm: UTMCoordinate, zone: number = DEFAULT_UTM_ZONE): [number, number] {
+  const [lng, lat] = proj4(getUtmProjString(zone), WGS84, utm);
   return [lat, lng];
 }
 
@@ -17,8 +38,8 @@ export function utmToLatLng(utm: UTMCoordinate): [number, number] {
 /**
  * Convierte coordenadas Lat/Lng a UTM
  */
-export function latLngToUtm(lat: number, lng: number): UTMCoordinate {
-  const [x, y] = proj4(WGS84, UTM_18S, [lng, lat]);
+export function latLngToUtm(lat: number, lng: number, zone: number = DEFAULT_UTM_ZONE): UTMCoordinate {
+  const [x, y] = proj4(WGS84, getUtmProjString(zone), [lng, lat]);
   return [x, y];
 }
 

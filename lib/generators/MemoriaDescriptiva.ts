@@ -65,8 +65,8 @@ export class MemoriaDescriptivaGenerator {
       { label: 'MANZANA', value: lote.manzana },
       { label: 'LOTE', value: lote.numeroLote },
       { label: 'CÓDIGO INTERNO', value: lote.codigo },
-      { label: 'DEPARTAMENTO', value: lote.ubicacion?.departamento || 'Lima' },
-      { label: 'PROVINCIA', value: lote.ubicacion?.provincia || 'Lima' },
+      { label: 'DEPARTAMENTO', value: lote.ubicacion?.departamento || '---' },
+      { label: 'PROVINCIA', value: lote.ubicacion?.provincia || '---' },
       { label: 'DISTRITO', value: lote.ubicacion?.distrito || '---' },
       { label: 'DIRECCIÓN', value: lote.ubicacion?.direccion || `Mz. ${lote.manzana} Lote ${lote.numeroLote}` },
     ];

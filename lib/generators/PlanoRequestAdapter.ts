@@ -12,6 +12,7 @@ import {
     Feature,
     Geometry
 } from '@/types/PlanosPayload';
+import { DEFAULT_UTM_ZONE } from '@/lib/geometry/utmUtils';
 
 /**
  * Adaptador para transformar solicitudes legacy (V1) al nuevo formato híbrido (V2).
@@ -61,11 +62,21 @@ export class PlanoRequestAdapter {
                     etapa: lote.etapa,
                     urbanizacion: lote.ubicacion?.urbanizacion || lote.nombre
                 },
+                // Sin defaults a 'Lima': si el payload no trae ubicación
+                // administrativa, se debe ver el vacío ('---') en el
+                // documento, no una ciudad inventada. PlanoDataProcessor
+                // marca requiresReview cuando esto pasa.
                 ubicacion: {
-                    departamento: lote.ubicacion?.departamento || 'Lima',
-                    provincia: lote.ubicacion?.provincia || 'Lima',
-                    distrito: lote.ubicacion?.distrito || '',
-                    direccion: lote.ubicacion?.direccion
+                    departamento: lote.ubicacion?.departamento || '---',
+                    provincia: lote.ubicacion?.provincia || '---',
+                    distrito: lote.ubicacion?.distrito || '---',
+                    direccion: lote.ubicacion?.direccion,
+                    // A diferencia de departamento/provincia/distrito, un
+                    // default numérico aquí SÍ es apropiado: la zona UTM es
+                    // un parámetro de proyección, no un dato administrativo
+                    // que pueda "inventarse" incorrectamente a simple vista.
+                    // 18 es correcto para el 100% del tráfico actual (Lima).
+                    zonaUTM: lote.ubicacion?.zonaUTM ?? DEFAULT_UTM_ZONE,
                 },
                 titularidad: request.propietario ? {
                     nombre: request.propietario.nombre,
