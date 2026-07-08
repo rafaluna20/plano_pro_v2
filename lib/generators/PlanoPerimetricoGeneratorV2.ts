@@ -674,17 +674,49 @@ export class PlanoPerimetricoGeneratorV2 {
       pdf.close();
       pdf.fillStroke();
 
-      // Etiqueta "LOTE XX" en el croquis
+      // Callout "aquí está el lote": círculo + línea guía a una etiqueta en
+      // zona despejada del recuadro, en vez de un texto diminuto adentro del
+      // propio lote (ilegible a esta escala, con 40+ vecinos alrededor).
+      // Convención estándar de planos de ubicación profesionales.
       const centerLote = this.calculateVisualCenter(lotePts);
-      pdf.setFontSize(5);
-      pdf.setTextColor(0);
+      const loteBBox = getBoundingBox(lotePts);
+      const circleRadius =
+        Math.sqrt(loteBBox.width ** 2 + loteBBox.height ** 2) / 2 + 1.5;
+
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(0.25);
+      pdf.circle(centerLote.x, centerLote.y, circleRadius, "S");
+
+      // Línea guía hacia abajo-izquierda: el header ocupa arriba y la
+      // flecha Norte la esquina superior derecha, así que esa diagonal es
+      // la zona más despejada con más frecuencia. Se recorta (clamp) para
+      // que la etiqueta nunca salga del recuadro dibujable.
+      const dirX = -0.7071;
+      const dirY = 0.7071; // Y crece hacia abajo en este espacio de papel
+      const leaderStartX = centerLote.x + circleRadius * dirX;
+      const leaderStartY = centerLote.y + circleRadius * dirY;
+      const leaderLength = Math.min(drawW, drawH) * 0.3;
+
+      const labelText = `LOTE ${this.payload.loteObjetivo.properties.identificador.lote}`;
+      pdf.setFontSize(6);
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-      pdf.text(
-        `LOTE ${this.payload.loteObjetivo.properties.identificador.lote}`,
-        centerLote.x,
-        centerLote.y,
-        { align: "center" },
-      );
+      const labelWidth = pdf.getTextWidth(labelText);
+
+      const rawEndX = centerLote.x + (circleRadius + leaderLength) * dirX;
+      const rawEndY = centerLote.y + (circleRadius + leaderLength) * dirY;
+      const labelX = Math.max(drawX + 2, Math.min(drawX + drawW - labelWidth - 2, rawEndX));
+      const labelY = Math.max(drawY + 5, Math.min(drawY + drawH - 2, rawEndY));
+
+      pdf.setLineWidth(0.3);
+      pdf.line(leaderStartX, leaderStartY, labelX, labelY);
+      pdf.setFillColor(0, 0, 0);
+      pdf.circle(leaderStartX, leaderStartY, 0.4, "F");
+
+      // Fondo blanco bajo la etiqueta para que se lea encima del contexto
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(labelX - 1, labelY - 3.3, labelWidth + 2, 4.3, "F");
+      pdf.setTextColor(0);
+      pdf.text(labelText, labelX, labelY, { align: "left" });
     }
   }
 
@@ -1024,7 +1056,9 @@ export class PlanoPerimetricoGeneratorV2 {
       pdf.text(`V${i + 1}`, p[0] + 2, p[1] - 2);
     });
 
-    // Cotas (dimensiones) - USANDO longitudTexto REGISTRAL
+    // Cotas (dimensiones) - USANDO longitudTexto REGISTRAL, orientadas en la
+    // dirección real del lado que etiquetan (convención CAD estándar), en
+    // vez de texto siempre horizontal sin relación visual con la línea.
     this.datosProcesados.linderosFinal.forEach(
       (lindero: LinderoRegistral, i: number) => {
         const p = paperPoints[i];
@@ -1032,15 +1066,53 @@ export class PlanoPerimetricoGeneratorV2 {
         const mx = (p[0] + next[0]) / 2;
         const my = (p[1] + next[1]) / 2;
 
-        // Caja blanca de fondo
-        pdf.setFillColor(255, 255, 255);
-        pdf.rect(mx - 6, my - 2, 12, 4, "F");
+        const dx = next[0] - p[0];
+        const dy = next[1] - p[1];
 
+        // Ángulo para pdf.text({angle}): en el espacio mm expuesto por jsPDF
+        // (Y hacia abajo), el vector de avance del texto para un ángulo dado
+        // en grados es (cos(ángulo), -sin(ángulo)) — ver verificación con las
+        // matrices Tm reales del PDF hecha para las etiquetas de grilla.
+        // Se normaliza a [-90°, 90°] para que el texto nunca quede al revés,
+        // conservando el paralelismo con la línea (da igual la dirección de
+        // recorrido del lado).
+        let angleDeg = Math.atan2(-dy, dx) * (180 / Math.PI);
+        if (angleDeg > 90) angleDeg -= 180;
+        else if (angleDeg < -90) angleDeg += 180;
+        const angleRad = (angleDeg * Math.PI) / 180;
+        const fux = Math.cos(angleRad);
+        const fuy = -Math.sin(angleRad);
+        const fperpX = -fuy;
+        const fperpY = fux;
+
+        const textStr = `${lindero.longitudTexto}m`;
         pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+        const textWidth = pdf.getTextWidth(textStr);
 
+        // Caja blanca de fondo, rotada igual que el texto (un rect sin rotar
+        // quedaría torcido respecto al texto en lados diagonales).
+        const halfW = textWidth / 2 + 1;
+        const halfH = 2;
+        const corners: [number, number][] = [
+          [mx - fux * halfW - fperpX * halfH, my - fuy * halfW - fperpY * halfH],
+          [mx + fux * halfW - fperpX * halfH, my + fuy * halfW - fperpY * halfH],
+          [mx + fux * halfW + fperpX * halfH, my + fuy * halfW + fperpY * halfH],
+          [mx - fux * halfW + fperpX * halfH, my - fuy * halfW + fperpY * halfH],
+        ];
+        cad.drawPolygon(corners, {
+          fillColor: PLANO_THEME.COLORS.WHITE,
+          strokeColor: PLANO_THEME.COLORS.WHITE,
+          lineWidth: 0.01,
+        });
+
+        pdf.setTextColor(0);
         // ⭐ USAR longitudTexto del registro, NO calcular
-        pdf.text(`${lindero.longitudTexto}m`, mx, my + 1, { align: "center" });
+        pdf.text(textStr, mx, my, {
+          align: "center",
+          baseline: "middle",
+          angle: angleDeg,
+        });
       },
     );
   }
@@ -1330,8 +1402,8 @@ export class PlanoPerimetricoGeneratorV2 {
         // del recuadro desde un ancla pegada al borde superior — por eso se
         // veía cortado. Se invierte el ángulo (-90) para que crezca hacia
         // abajo, adentro del recuadro, igual que el de abajo pero en espejo.
-        pdf.text(x.toString(), px - 2, area.y + area.height - 2, { angle: 90 });
-        pdf.text(x.toString(), px - 2, area.y + 2, { angle: -90 });
+        pdf.text(`${x}E`, px - 2, area.y + area.height - 2, { angle: 90 });
+        pdf.text(`${x}E`, px - 2, area.y + 2, { angle: -90 });
       }
     }
 
@@ -1340,10 +1412,10 @@ export class PlanoPerimetricoGeneratorV2 {
       const py = cy - metrosAPapel(y - centroUtm[1], escala);
       if (py > area.y && py < area.y + area.height) {
         pdf.line(area.x, py, area.x + area.width, py);
-        pdf.text(y.toString(), area.x + area.width - 2, py - 1, {
+        pdf.text(`${y}N`, area.x + area.width - 2, py - 1, {
           align: "right",
         });
-        pdf.text(y.toString(), area.x + 2, py - 1, { align: "left" });
+        pdf.text(`${y}N`, area.x + 2, py - 1, { align: "left" });
       }
     }
 
