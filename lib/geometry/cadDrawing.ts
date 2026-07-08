@@ -7,6 +7,46 @@ export class CADDrawing {
   constructor(private pdf: jsPDF) {}
 
   /**
+   * Dibuja una imagen ajustada dentro de un recuadro SIN deformarla ("contain
+   * fit"): se escala respetando su proporción real y se centra, dejando
+   * margen en el eje que sobre, en vez de estirarla para llenar todo el
+   * recuadro (lo que aplasta cualquier logo que no sea exactamente del mismo
+   * ancho/alto que el espacio disponible — ej. un logo circular se vuelve
+   * una elipse).
+   */
+  drawImageContained(
+    data: Uint8Array,
+    format: string,
+    boxX: number,
+    boxY: number,
+    boxW: number,
+    boxH: number,
+  ): void {
+    const props = this.pdf.getImageProperties(data);
+    const naturalRatio = props.width / props.height;
+    const boxRatio = boxW / boxH;
+
+    let drawW: number;
+    let drawH: number;
+    if (naturalRatio > boxRatio) {
+      // La imagen es proporcionalmente más ancha que el recuadro: el ancho
+      // manda, el alto queda con margen arriba/abajo.
+      drawW = boxW;
+      drawH = boxW / naturalRatio;
+    } else {
+      // La imagen es proporcionalmente más alta (o cuadrada): el alto manda,
+      // el ancho queda con margen a los costados.
+      drawH = boxH;
+      drawW = boxH * naturalRatio;
+    }
+
+    const drawX = boxX + (boxW - drawW) / 2;
+    const drawY = boxY + (boxH - drawH) / 2;
+
+    this.pdf.addImage(data, format, drawX, drawY, drawW, drawH, undefined, "FAST");
+  }
+
+  /**
    * Dibuja una línea con estilo CAD
    */
   drawLine(

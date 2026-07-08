@@ -202,7 +202,7 @@ export interface ConfiguracionImpresion {
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;
-  formatoPapel: "A3" | "A4" | "A2";
+  formatoPapel: "A3" | "A4" | "A2" | "A1" | "A0";
   orientacion: "landscape" | "portrait";
   escala: string | null; // "1/500" o null para auto
   estilos: EstilosPlano;

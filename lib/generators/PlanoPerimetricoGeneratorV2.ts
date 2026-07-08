@@ -1285,8 +1285,15 @@ export class PlanoPerimetricoGeneratorV2 {
     const colSplit = w * MEMBRETE.LOGO_COLUMN_PERCENT;
     pdf.line(x + colSplit, y, x + colSplit, y + h);
 
-    // Logo
+    // Columna del logo: rediseñada como una pila vertical de 3 bloques —
+    // logo (contain-fit, nunca deformado), "EMPRESA / ING." y el formato de
+    // papel para el que se calculó la escala impresa (importante: la
+    // "ESCALA 1/75" del membrete solo es correcta si se imprime a este
+    // tamaño exacto; imprimirlo en otro tamaño desajusta la escala real sin
+    // que se note a simple vista).
+    const logoBoxH = h * 0.55;
     const logoUrl = this.payload.configImpresion?.logoUrl;
+    const formatoPapel = this.payload.configImpresion?.formatoPapel || "A3";
 
     if (logoUrl) {
       try {
@@ -1296,31 +1303,42 @@ export class PlanoPerimetricoGeneratorV2 {
         const data = new Uint8Array(buffer);
         const contentType = res.headers.get("content-type") || "";
         const format = contentType.includes("png") ? "PNG" : "JPEG";
-        pdf.addImage(
+        const cad = new CADDrawing(pdf);
+        cad.drawImageContained(
           data,
           format,
-          x + 10,
+          x + 4,
           y + 2,
-          colSplit - 20,
-          h - 30,
-          undefined,
-          "FAST",
+          colSplit - 8,
+          logoBoxH - 4,
         );
-
-        // pdf.rect(x + 5, y + 5, colSplit - 10, h - 10);
       } catch (err) {
         console.warn("Fallo al cargar logoUrl:", err);
-        this.drawLogoPlaceholder(pdf, x, y, colSplit, h);
+        this.drawLogoPlaceholder(pdf, x, y, colSplit, logoBoxH);
       }
     } else {
-      this.drawLogoPlaceholder(pdf, x, y, colSplit, h);
+      this.drawLogoPlaceholder(pdf, x, y, colSplit, logoBoxH);
     }
 
+    pdf.setTextColor(0);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.LABEL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-    pdf.text("EMPRESA / ING.", x + colSplit / 2, y + h / 2 + 4, {
+    pdf.text("EMPRESA / ING.", x + colSplit / 2, y + logoBoxH + 6, {
       align: "center",
     });
+
+    const dimmedForFormato = parseInt(
+      PLANO_THEME.COLORS.DIMMED.slice(1, 3),
+      16,
+    );
+    pdf.setTextColor(dimmedForFormato);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.text(
+      `Formato de impresión: ${formatoPapel}`,
+      x + colSplit / 2,
+      y + logoBoxH + 12,
+      { align: "center" },
+    );
 
     const startX = x + colSplit + MEMBRETE.PADDING_H;
     const lineHeight = h / MEMBRETE.NUM_FILAS;

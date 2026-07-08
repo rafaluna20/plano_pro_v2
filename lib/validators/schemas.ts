@@ -67,7 +67,7 @@ export const planoConfigSchema = z.object({
   incluirMemoriaDescriptiva: z.boolean().default(true),
   incluirPlanoPerimetrico: z.boolean().default(true),
   incluirPlanoUbicacion: z.boolean().default(true),
-  formatoPapel: z.enum(['A4', 'A3', 'Legal']).default('A4'),
+  formatoPapel: z.enum(['A4', 'A3', 'A2', 'A1', 'A0', 'Legal']).default('A4'),
   orientacion: z.enum(['portrait', 'landscape']).default('portrait'),
   escala: z.string().optional(),
   incluirColindantesEnPlano: z.boolean().default(true),

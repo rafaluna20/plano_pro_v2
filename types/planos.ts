@@ -57,7 +57,7 @@ export interface PlanoConfig {
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;
-  formatoPapel?: 'A4' | 'A3' | 'A2' | 'Legal';
+  formatoPapel?: 'A4' | 'A3' | 'A2' | 'A1' | 'A0' | 'Legal';
   orientacion?: 'portrait' | 'landscape';
   escala?: string;
   incluirColindantesEnPlano: boolean;

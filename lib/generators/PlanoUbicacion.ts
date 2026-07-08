@@ -437,8 +437,11 @@ export class PlanoUbicacionGenerator {
 
     // LOGO: imagen real si config.logoUrl está seteado (default: logo de
     // Akallpa, ver PlanoRequestAdapter.mapConfig), con el mismo patrón de
-    // fetch + fallback que ya usa PlanoPerimetricoGeneratorV2.
+    // fetch + fallback que ya usa PlanoPerimetricoGeneratorV2. Se usa
+    // drawImageContained (contain-fit) en vez de forzar ancho=alto=logoSize,
+    // para no depender de que el logo sea exactamente cuadrado.
     const logoUrl = (this.config as any)?.logoUrl;
+    const logoBoxH = h * 0.45;
     let logoDrawn = false;
     if (logoUrl) {
       try {
@@ -448,17 +451,8 @@ export class PlanoUbicacionGenerator {
         const data = new Uint8Array(buffer);
         const contentType = res.headers.get('content-type') || '';
         const format = contentType.includes('png') ? 'PNG' : 'JPEG';
-        const logoSize = Math.min(leftW - 10, 30);
-        pdf.addImage(
-          data,
-          format,
-          x + leftW / 2 - logoSize / 2,
-          y + 5,
-          logoSize,
-          logoSize,
-          undefined,
-          'FAST',
-        );
+        const cad = new CADDrawing(pdf);
+        cad.drawImageContained(data, format, x + 4, y + 3, leftW - 8, logoBoxH);
         logoDrawn = true;
       } catch (err) {
         console.warn('Fallo al cargar logoUrl en PlanoUbicacion:', err);
@@ -475,7 +469,16 @@ export class PlanoUbicacionGenerator {
     }
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('TERRA LIMA', x + leftW/2, y + 55, { align: 'center' });
+    pdf.text('TERRA LIMA', x + leftW / 2, y + logoBoxH + 11, { align: 'center' });
+
+    // Formato de impresión: la "ESC:" que se imprime abajo del membrete solo
+    // es correcta si el plano se imprime a este tamaño exacto de papel.
+    const formatoPapel = (this.config as any)?.formatoPapel || 'A3';
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(100);
+    pdf.text(`Formato: ${formatoPapel}`, x + leftW / 2, y + logoBoxH + 17, { align: 'center' });
+    pdf.setTextColor(0);
 
     // INFO
     let lineY = y + 10;
