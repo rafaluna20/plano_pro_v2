@@ -540,11 +540,11 @@ export class PlanoPerimetricoGeneratorV2 {
     // El auto-fit no debe encuadrar el 100% de la extensión recolectada
     // (lote + todos los vecinos del payload): eso deja el lote como un punto
     // diminuto perdido entre manzanas lejanas. Fingimos que el contenido a
-    // encuadrar es solo el 70% de su ancho/alto real, así el zoom queda más
-    // cerrado y el lote se ve prominente; el 30% más externo del contexto
+    // encuadrar es solo el 60% de su ancho/alto real, así el zoom queda más
+    // cerrado y el lote se ve prominente; el 40% más externo del contexto
     // recolectado queda fuera del recuadro (el clip de drawLocationPlanAutoScale
     // ya se encarga de recortarlo limpiamente, no hace falta filtrar antes).
-    const CONTEXT_VISIBLE_FRACTION = 0.7;
+    const CONTEXT_VISIBLE_FRACTION = 0.6;
 
     // 2. Recolectar coordenadas para el BBox: TODOS los vecinos del payload,
     // sin filtro de radio propio. Antes había un MAX_RADIUS=70m hardcodeado
@@ -1322,8 +1322,14 @@ export class PlanoPerimetricoGeneratorV2 {
       const px = cx + metrosAPapel(x - centroUtm[0], escala);
       if (px > area.x && px < area.x + area.width) {
         pdf.line(px, area.y, px, area.y + area.height);
+        // Abajo: el texto crece hacia arriba (adentro del recuadro) desde el
+        // borde inferior. Arriba: con el mismo angle=90 el texto crecería en
+        // la MISMA dirección absoluta (hacia arriba), es decir hacia AFUERA
+        // del recuadro desde un ancla pegada al borde superior — por eso se
+        // veía cortado. Se invierte el ángulo (-90) para que crezca hacia
+        // abajo, adentro del recuadro, igual que el de abajo pero en espejo.
         pdf.text(x.toString(), px - 2, area.y + area.height - 2, { angle: 90 });
-        pdf.text(x.toString(), px - 2, area.y + 2, { angle: 90 });
+        pdf.text(x.toString(), px - 2, area.y + 2, { angle: -90 });
       }
     }
 
