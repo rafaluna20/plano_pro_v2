@@ -204,6 +204,18 @@ export class PlanoPerimetricoGeneratorV2 {
       PLANO_THEME.NORTE.SIZE,
     );
 
+    // Escala del plano principal, visible directamente sobre el dibujo
+    // (antes solo figuraba en el membrete de la columna derecha).
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setTextColor(0);
+    pdf.text(
+      `ESC. ${escalaMain.escalaTexto.trim()}`,
+      layout.drawingArea.x + 3,
+      layout.drawingArea.y + 5,
+      { align: "left" },
+    );
+
     pdf.restoreGraphicsState();
 
     // ========== 7. COLUMNA DERECHA (Información) ==========
@@ -1553,7 +1565,13 @@ export class PlanoPerimetricoGeneratorV2 {
     const bbox = getBoundingBox(vertices);
     const scaleX = (bbox.width * 1000) / (w - m * 2);
     const scaleY = (bbox.height * 1000) / (h - m * 2);
-    const raw = Math.max(scaleX, scaleY);
+    // ZOOM_OUT_PADDING: antes el lote se ajustaba al 100% exacto del área
+    // disponible (ajuste "a presión"), lo que lo hacía ver grande/apretado
+    // contra el marco. 1.15 deja ~15% de aire extra alrededor, así el lote
+    // sale un poco más pequeño y con más contexto visible sin tocar el
+    // recuadro.
+    const ZOOM_OUT_PADDING = 1.15;
+    const raw = Math.max(scaleX, scaleY) * ZOOM_OUT_PADDING;
 
     const scales = [
       50, 75, 100, 125, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000,
