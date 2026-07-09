@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { MemoriaDescriptivaGenerator } from './MemoriaDescriptiva';
 import { PlanoPerimetricoGeneratorV2 } from './PlanoPerimetricoGeneratorV2';
+import { PlanoPerimetricoGeneratorV2Copia } from './PlanoPerimetricoGeneratorV2Copia';
 import { PlanoUbicacionGenerator } from './PlanoUbicacion';
 import { PlanoRequestAdapter, DEFAULT_LOGO_URL } from './PlanoRequestAdapter';
 import { procesarDatosPlano } from '@/lib/services/PlanoDataProcessor';
@@ -93,6 +94,10 @@ export class PlanoGenerator {
       // perimétrico corre antes en la cola, el valor ya está listo para
       // cuando Ubicación lo lee dentro de su propio generate().
       const planoPerimetricoGen = new PlanoPerimetricoGeneratorV2(hybridPayload, datosProcesados);
+      // Copia editable del Plano Perimétrico (lib/generators/PlanoPerimetricoGeneratorV2Copia.ts):
+      // instancia independiente, no participa del enlace de escala con
+      // PlanoUbicacion (ese sigue usando planoPerimetricoGen, el original).
+      const planoPerimetricoCopiaGen = new PlanoPerimetricoGeneratorV2Copia(hybridPayload, datosProcesados);
 
       const queue: Array<{
         condition: boolean;
@@ -111,6 +116,12 @@ export class PlanoGenerator {
             generator: planoPerimetricoGen,
             format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
             name: 'Plano Perimétrico'
+          },
+          {
+            condition: !!this.config.incluirPlanoPerimetrico,
+            generator: planoPerimetricoCopiaGen,
+            format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
+            name: 'Plano Perimétrico (Copia)'
           },
           {
             condition: !!this.config.incluirPlanoUbicacion,
