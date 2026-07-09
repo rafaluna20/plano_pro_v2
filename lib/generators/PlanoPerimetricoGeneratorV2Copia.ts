@@ -30,6 +30,7 @@ import {
   utmToLatLng,
   calculateInteriorAngles,
   DEFAULT_UTM_ZONE,
+  toDMS,
 } from "@/lib/geometry/utmUtils";
 import { MapService } from "@/lib/services/MapService";
 import { PLANO_THEME, getGridInterval } from "@/lib/config/PlanoTheme";
@@ -38,8 +39,6 @@ import type {
   LinderoRegistral,
 } from "@/types/PlanosPayload";
 import type { DatosProcesados } from "@/lib/services/PlanoDataProcessor";
-import * as turf from "@turf/turf";
-import { drawCoordinatesTechnicalTable } from "./CoordinatesTable";
 
 // ============================================================================
 // TIPOS INTERNOS
@@ -193,8 +192,8 @@ export class PlanoPerimetricoGeneratorV2Copia {
       centerY,
     );
 
-    // D. Etiqueta Central (Lote + Área + Perímetro)
-    this.drawPolygonCentralData(pdf, paperPoints);
+    // D. (Etiqueta Central movida fuera del plano — ver drawTechnicalTableHybrid,
+    // ahora se dibuja debajo del "CUADRO DE DATOS TÉCNICOS")
 
     // E. Datos Topográficos (Cotas con texto REGISTRAL, Vértices, Ángulos)
     this.drawVerticesAndDimensions(pdf, paperPoints, cad);
@@ -243,7 +242,20 @@ export class PlanoPerimetricoGeneratorV2Copia {
     );
 
     // 3. Cuadro Técnico (CON DATOS PROCESADOS)
-    this.drawTechnicalTableHybrid(pdf, layout.technicalTableArea, utmVertices);
+    const finalYTablaTecnica = this.drawTechnicalTableHybrid(
+      pdf,
+      layout.technicalTableArea,
+      utmVertices,
+    );
+
+    // 3b. Área / Perímetro, debajo del cuadro técnico (antes centrado
+    // dentro del polígono del plano principal — ver nota en el método).
+    this.drawAreaPerimetroDebajoDeTabla(
+      pdf,
+      layout.technicalTableArea.x,
+      finalYTablaTecnica + 3,
+      layout.technicalTableArea.width,
+    );
 
     // 4. Membrete Profesional
     await this.drawProfessionalMembrete(
@@ -836,24 +848,171 @@ export class PlanoPerimetricoGeneratorV2Copia {
   // ==========================================================================
 
   /**
-   * Dibuja cuadro técnico usando datos procesados (REGISTRAL > CALCULADO)
+   * Dibuja cuadro técnico usando datos procesados (REGISTRAL > CALCULADO).
+   * A diferencia del Plano Perimétrico oficial y la Memoria Descriptiva
+   * (que comparten lib/generators/CoordinatesTable.ts), esta copia NO
+   * muestra las columnas ESTE (X) / NORTE (Y) — a pedido, solo en esta
+   * copia. Por eso implementa su propia tabla en vez de usar la función
+   * compartida.
    */
   private drawTechnicalTableHybrid(
     pdf: jsPDF,
     area: AreaDibujo,
     vertices: [number, number][],
-  ): void {
-    // Tabla compartida con la Memoria Descriptiva (misma fuente de verdad
-    // visual y de datos, ver lib/generators/CoordinatesTable.ts) para que
-    // ambos folios del expediente muestren exactamente el mismo cuadro.
-    drawCoordinatesTechnicalTable(
-      pdf,
-      area.x,
-      area.y,
-      area.width,
-      vertices,
-      this.datosProcesados.linderosFinal,
+  ): number {
+    const { TABLA_TECNICA } = PLANO_THEME;
+    const { x, width } = area;
+    let cy = area.y;
+
+    // Título
+    pdf.setFillColor(0, 0, 0);
+    pdf.rect(x, cy, width, TABLA_TECNICA.HEADER_HEIGHT, "F");
+    pdf.setTextColor(255);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.text("CUADRO DE DATOS TÉCNICOS (WGS84)", x + width / 2, cy + 4, {
+      align: "center",
+    });
+    cy += TABLA_TECNICA.HEADER_HEIGHT;
+
+    // Sub-header: solo V. / LADO / DIST. / ANG. (sin ESTE/NORTE)
+    const cols = ["V.", "LADO", "DIST.", "ANG."];
+    const colW = [13, 23, 33, 31].map((p) => (width * p) / 100);
+    const headerColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_HEADER);
+
+    pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
+    pdf.setDrawColor(0);
+    pdf.rect(x, cy, width, TABLA_TECNICA.SUBHEADER_HEIGHT, "FD");
+    pdf.setTextColor(0);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+
+    let cx = x;
+    cols.forEach((c, i) => {
+      pdf.text(c, cx + colW[i] / 2, cy + 3.5, { align: "center" });
+      pdf.line(cx + colW[i], cy, cx + colW[i], cy + TABLA_TECNICA.SUBHEADER_HEIGHT);
+      cx += colW[i];
+    });
+    cy += TABLA_TECNICA.SUBHEADER_HEIGHT;
+
+    // Filas de datos
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
+
+    const angulosInternos = calculateInteriorAngles(vertices);
+    const linderoPorVertice = new Map(
+      this.datosProcesados.linderosFinal.map((l) => [l.index, l]),
     );
+    const zebraColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_ZEBRA);
+
+    let totalLength = 0;
+    let totalAngle = 0;
+
+    vertices.forEach((v, i) => {
+      const lindero = linderoPorVertice.get(i);
+      const next = (i + 1) % vertices.length;
+
+      if (i % 2 === 0) {
+        pdf.setFillColor(255, 255, 255);
+      } else {
+        pdf.setFillColor(zebraColor.r, zebraColor.g, zebraColor.b);
+      }
+      pdf.rect(x, cy, width, TABLA_TECNICA.ROW_HEIGHT, "FD");
+
+      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+
+      const lenVal = lindero ? parseFloat(lindero.longitudTexto) : 0;
+      totalLength += isNaN(lenVal) ? 0 : lenVal;
+      const angDeg = angulosInternos[i];
+      totalAngle += angDeg;
+
+      const values = [
+        `V${i + 1}`,
+        lindero?.tramo ?? `V${i + 1} - V${next + 1}`,
+        lindero ? `${lindero.longitudTexto}m` : "---",
+        toDMS(angDeg),
+      ];
+
+      cx = x;
+      values.forEach((val, j) => {
+        pdf.text(val, cx + colW[j] / 2, cy + 3, { align: "center" });
+        pdf.line(cx + colW[j], cy, cx + colW[j], cy + TABLA_TECNICA.ROW_HEIGHT);
+        cx += colW[j];
+      });
+
+      cy += TABLA_TECNICA.ROW_HEIGHT;
+    });
+
+    // Fila TOTAL
+    pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
+    pdf.rect(x, cy, width, TABLA_TECNICA.ROW_HEIGHT, "FD");
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setTextColor(0);
+
+    const labelW = colW[0] + colW[1];
+    pdf.text("TOTAL", x + labelW / 2, cy + 3, { align: "center" });
+
+    let cxSum = x + labelW;
+    pdf.text(totalLength.toFixed(2) + "m", cxSum + colW[2] / 2, cy + 3, {
+      align: "center",
+    });
+    cxSum += colW[2];
+    pdf.text(toDMS(totalAngle), cxSum + colW[3] / 2, cy + 3, {
+      align: "center",
+    });
+    cy += TABLA_TECNICA.ROW_HEIGHT;
+
+    // Borde exterior
+    pdf.setDrawColor(0);
+    pdf.rect(x, area.y, width, cy - area.y);
+
+    return cy;
+  }
+
+  /**
+   * Información de LOTE / Área / Perímetro, antes centrada dentro del
+   * polígono del plano principal (drawPolygonCentralData) — a pedido, se
+   * saca de ahí y se dibuja aquí, debajo del "CUADRO DE DATOS TÉCNICOS".
+   */
+  private drawAreaPerimetroDebajoDeTabla(
+    pdf: jsPDF,
+    x: number,
+    y: number,
+    width: number,
+  ): void {
+    const loteProps = this.payload.loteObjetivo.properties;
+    const perimetroVisual = this.datosProcesados.linderosFinal.reduce(
+      (sum, l) => sum + parseFloat(l.longitudTexto),
+      0,
+    );
+    const loteText = `LOTE ${loteProps.identificador.lote}`;
+    const areaText = `A = ${this.datosProcesados.areaFinal.toFixed(2)} m²`;
+    const perimText = `P = ${perimetroVisual.toFixed(2)} ml`;
+
+    const LOTE_FONT = PLANO_THEME.FONTS.SIZES.BODY;
+    const AREA_PERIMETRO_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.5;
+    const rowGap = 5.25; // mismo espaciado ya usado antes para estas líneas
+
+    const centerX = x + width / 2;
+    const loteY = y + 4;
+    const areaY = loteY + rowGap;
+    const perimY = areaY + rowGap;
+    const boxHeight = perimY - loteY + 6;
+
+    pdf.setFillColor(255, 255, 255);
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
+    pdf.rect(x, y, width, boxHeight, "FD");
+
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(LOTE_FONT);
+    pdf.setTextColor(0);
+    pdf.text(loteText, centerX, loteY, { align: "center" });
+
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
+    pdf.setFontSize(AREA_PERIMETRO_FONT);
+    pdf.text(areaText, centerX, areaY, { align: "center" });
+    pdf.text(perimText, centerX, perimY, { align: "center" });
   }
 
   // ==========================================================================
@@ -1089,67 +1248,6 @@ export class PlanoPerimetricoGeneratorV2Copia {
   // ==========================================================================
   // MÉTODOS AUXILIARES
   // ==========================================================================
-
-  private drawPolygonCentralData(
-    pdf: jsPDF,
-    paperPoints: [number, number][],
-  ): void {
-    const center = this.calculatePoleOfInaccessibility(paperPoints);
-    const loteProps = this.payload.loteObjetivo.properties;
-
-    // Fuente de "A = .../P = ..." aumentada 50% a pedido (SMALL 6pt -> 9pt).
-    // La caja y el espaciado se recalculan a partir del ancho real del texto
-    // (en vez de PLANO_THEME.ETIQUETA_CENTRAL, pensado para la fuente
-    // original) para que no se desborden con la fuente más grande; el tema
-    // compartido no se toca, así el Plano Perimétrico oficial no cambia.
-    const AREA_PERIMETRO_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.5;
-    const LOTE_FONT = PLANO_THEME.FONTS.SIZES.BODY;
-    const lineSpacing = PLANO_THEME.ETIQUETA_CENTRAL.LINE_SPACING * 1.5;
-
-    const perimetroVisual = this.datosProcesados.linderosFinal.reduce(
-      (sum, l) => sum + parseFloat(l.longitudTexto),
-      0,
-    );
-    const loteText = `LOTE ${loteProps.identificador.lote}`;
-    const areaText = `A = ${this.datosProcesados.areaFinal.toFixed(2)} m²`;
-    const perimText = `P = ${perimetroVisual.toFixed(2)} ml`;
-
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-    pdf.setFontSize(LOTE_FONT);
-    const loteWidth = pdf.getTextWidth(loteText);
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-    pdf.setFontSize(AREA_PERIMETRO_FONT);
-    const areaWidth = pdf.getTextWidth(areaText);
-    const perimWidth = pdf.getTextWidth(perimText);
-
-    const PADDING_H = 3;
-    const boxWidth = Math.max(loteWidth, areaWidth, perimWidth) + PADDING_H * 2;
-    const loteY = center.y - 3;
-    const areaY = center.y + 2;
-    const perimY = areaY + lineSpacing;
-    const boxHeight = perimY - loteY + 6; // margen arriba/abajo del contenido
-
-    pdf.setFillColor(255, 255, 255);
-    pdf.setDrawColor(0);
-    pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
-    pdf.rect(
-      center.x - boxWidth / 2,
-      center.y - boxHeight / 2,
-      boxWidth,
-      boxHeight,
-      "FD",
-    );
-
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-    pdf.setFontSize(LOTE_FONT);
-    pdf.setTextColor(0);
-    pdf.text(loteText, center.x, loteY, { align: "center" });
-
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-    pdf.setFontSize(AREA_PERIMETRO_FONT);
-    pdf.text(areaText, center.x, areaY, { align: "center" });
-    pdf.text(perimText, center.x, perimY, { align: "center" });
-  }
 
   private drawHeaderTitleBar(pdf: jsPDF, area: AreaDibujo): void {
     const { x, y, width, height } = area;
@@ -1616,42 +1714,6 @@ export class PlanoPerimetricoGeneratorV2Copia {
     const final = scales.find((s) => s >= raw) || Math.ceil(raw / 100) * 100;
 
     return { escala: final, escalaTexto: `1 / ${final} ` };
-  }
-
-  private calculatePoleOfInaccessibility(pts: [number, number][]): {
-    x: number;
-    y: number;
-  } {
-    // 1. Intentar con el Centroide geométrico (promedio de vértices)
-    const centroid = this.calculateVisualCenter(pts);
-
-    // 2. Verificar si el centroide está dentro del polígono
-    try {
-      // Cerrar polígono para turf (requiere primer punto = último punto)
-      const poly = turf.polygon([[...pts, pts[0]]]);
-      const pt = turf.point([centroid.x, centroid.y]);
-
-      // Si el centroide está dentro, es el mejor punto para la etiqueta
-      if (turf.booleanPointInPolygon(pt, poly)) {
-        return centroid;
-      }
-    } catch (error) {
-      console.warn("Error verificando punto en polígono:", error);
-    }
-
-    // 3. Fallback: Si el centroide está fuera (ej. lote en U), usar centro del bounding box
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    pts.forEach((p) => {
-      if (p[0] < minX) minX = p[0];
-      if (p[0] > maxX) maxX = p[0];
-      if (p[1] < minY) minY = p[1];
-      if (p[1] > maxY) maxY = p[1];
-    });
-
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
   }
 
   private calculateVisualCenter(pts: [number, number][]): {
