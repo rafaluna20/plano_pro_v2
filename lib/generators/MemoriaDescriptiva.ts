@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
+import { DatosProcesados } from '@/lib/services/PlanoDataProcessor';
+import { calculateInteriorAngles, toDMS } from '@/lib/geometry/utmUtils';
 
 /**
  * Generador de Memoria Descriptiva - Proyecto Terra Lima
@@ -8,16 +10,23 @@ import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 export class MemoriaDescriptivaGenerator {
   private request: GenerarPlanosRequest;
   private config: PlanoConfig;
-  
+  // Datos ya procesados (prioridad registral + ángulos internos) — la misma
+  // fuente que usa el Plano Perimétrico para su "CUADRO DE DATOS TÉCNICOS",
+  // así ambos documentos del expediente muestran exactamente los mismos
+  // valores de distancia y ángulo por lado (evita inconsistencias entre
+  // folios de un mismo trámite).
+  private datosProcesados: DatosProcesados;
+
   // Constantes de diseño
   private readonly MARGIN = 25;
   private readonly LINE_HEIGHT = 6;
   private readonly SECTION_GAP = 10;
   private readonly COLOR_PRIMARY = [50, 50, 50]; // Gris oscuro corporativo
 
-  constructor(request: GenerarPlanosRequest, config: PlanoConfig) {
+  constructor(request: GenerarPlanosRequest, config: PlanoConfig, datosProcesados: DatosProcesados) {
     this.request = request;
     this.config = config;
+    this.datosProcesados = datosProcesados;
   }
 
   async generate(pdf: jsPDF): Promise<void> {
@@ -74,20 +83,9 @@ export class MemoriaDescriptivaGenerator {
     y = this.drawDataGrid(pdf, ubicacionData, y);
     y += this.SECTION_GAP;
 
-    // --- III. CUADRO DE ÁREAS Y MEDIDAS ---
+    // --- III. LINDEROS Y MEDIDAS PERIMÉTRICAS ---
     y = this.checkPageBreak(pdf, y, pageHeight, lote);
-    y = this.drawSectionTitle(pdf, 'III. ÁREA Y PERÍMETRO', y);
-
-    const areasData = [
-      { label: 'ÁREA DEL TERRENO', value: `${dimensiones.area.toFixed(2)} m²`, bold: true },
-      { label: 'PERÍMETRO TOTAL', value: `${dimensiones.perimetro.toFixed(2)} ml`, bold: true },
-    ];
-    y = this.drawDataGrid(pdf, areasData, y);
-    y += this.SECTION_GAP;
-
-    // --- IV. LINDEROS Y MEDIDAS PERIMÉTRICAS ---
-    y = this.checkPageBreak(pdf, y, pageHeight, lote);
-    y = this.drawSectionTitle(pdf, 'IV. LINDEROS Y MEDIDAS PERIMÉTRICAS', y);
+    y = this.drawSectionTitle(pdf, 'III. LINDEROS Y MEDIDAS PERIMÉTRICAS', y);
 
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
@@ -97,14 +95,14 @@ export class MemoriaDescriptivaGenerator {
     // Iterar sobre las colindancias del JSON (Frente, Fondo, Derecha, Izquierda)
     colindancias.forEach((col) => {
       y = this.checkPageBreak(pdf, y, pageHeight, lote);
-      
+
       const lado = col.lado.toUpperCase(); // FRENTE, DERECHA, etc.
-      
+
       // Construcción inteligente del texto legal
       let descripcion = '';
       const longitud = col.longitud ? col.longitud.toFixed(2) : '0.00';
       const nombre = col.nombre || '---';
-      
+
       // Lógica de redacción según tipo
       if (col.tipo?.toLowerCase() === 'calle' || col.tipo?.toLowerCase() === 'via' || col.tipo?.toLowerCase() === 'av') {
         descripcion = `Por el ${lado}: Colinda con ${col.tipo} "${nombre}", con una línea recta de ${longitud} ml.`;
@@ -116,16 +114,27 @@ export class MemoriaDescriptivaGenerator {
       // Dibujar título del lado (Negrita)
       pdf.setFont('helvetica', 'bold');
       pdf.text(`POR EL ${lado}:`, this.MARGIN + 5, y);
-      
+
       // Dibujar descripción (Normal) con indentación
       pdf.setFont('helvetica', 'normal');
       // Usamos splitTextToSize para manejar textos largos que necesiten wrap
       const lines = pdf.splitTextToSize(descripcion.split(':')[1].trim(), pageWidth - (this.MARGIN * 2) - 35);
       pdf.text(lines, this.MARGIN + 40, y);
-      
+
       y += (lines.length * this.LINE_HEIGHT) + 2;
     });
-    
+
+    y += this.SECTION_GAP;
+
+    // --- IV. ÁREA Y PERÍMETRO ---
+    y = this.checkPageBreak(pdf, y, pageHeight, lote);
+    y = this.drawSectionTitle(pdf, 'IV. ÁREA Y PERÍMETRO', y);
+
+    const areasData = [
+      { label: 'ÁREA DEL TERRENO', value: `${dimensiones.area.toFixed(2)} m²`, bold: true },
+      { label: 'PERÍMETRO TOTAL', value: `${dimensiones.perimetro.toFixed(2)} ml`, bold: true },
+    ];
+    y = this.drawDataGrid(pdf, areasData, y);
     y += this.SECTION_GAP;
 
     // --- V. COORDENADAS UTM (Cuadro Técnico) ---
@@ -259,14 +268,22 @@ export class MemoriaDescriptivaGenerator {
   private drawCoordinatesTable(pdf: jsPDF, vertices: number[][], y: number): number {
     const pageWidth = pdf.internal.pageSize.width;
     const tableWidth = pageWidth - (this.MARGIN * 2);
-    const colWidths = [20, 30, 45, 45]; // Ajuste de anchos
     const rowHeight = 7;
-    
-    // Centrar tabla
-    const startX = this.MARGIN + (tableWidth - (colWidths[0]*4))/2; // Ajuste simple
-    // Mejor usamos distribución proporcional
-    let currentX = this.MARGIN;
-    const finalColWidths = [25, 35, 45, 45]; // Total 150 aprox
+
+    // Anchos proporcionales al contenido de cada columna (suman tableWidth).
+    // Orden solicitado: VÉRTICE, LADO, DIST., ÁNGULO INTERNO, ESTE (X), NORTE (Y).
+    const colWidths = [18, 26, 22, 30, 32, 32].map((w) => (w / 160) * tableWidth);
+
+    // Ángulos internos: misma fuente única de verdad que el Plano
+    // Perimétrico (lib/geometry/utmUtils), robusta ante el sentido de
+    // recorrido del polígono.
+    const angulosInternos = calculateInteriorAngles(vertices as [number, number][]);
+
+    // Distancias registrales por lado: misma fuente que el Plano
+    // Perimétrico (datosProcesados.linderosFinal), indexadas por vértice.
+    const linderoPorVertice = new Map(
+      this.datosProcesados.linderosFinal.map((l) => [l.index, l]),
+    );
 
     // Header
     pdf.setFillColor(50, 50, 50);
@@ -275,40 +292,46 @@ export class MemoriaDescriptivaGenerator {
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(9);
 
-    const headers = ['VÉRTICE', 'LADO', 'ESTE (X)', 'NORTE (Y)'];
+    const headers = ['VÉRTICE', 'LADO', 'DIST.', 'ÁNG. INTERNO', 'ESTE (X)', 'NORTE (Y)'];
     let x = this.MARGIN;
-    
-    // Distribución equitativa para que se vea bien
-    const w = tableWidth / 4;
     headers.forEach((h, i) => {
-        pdf.text(h, x + w/2, y + 5, { align: 'center' });
-        x += w;
+        pdf.text(h, x + colWidths[i] / 2, y + 5, { align: 'center' });
+        x += colWidths[i];
     });
-    
+
     y += rowHeight;
     pdf.setTextColor(0);
 
     // Rows
     vertices.forEach((v, i) => {
       const next = (i + 1) % vertices.length;
-      
+      const lindero = linderoPorVertice.get(i);
+
       if (i % 2 === 0) {
         pdf.setFillColor(245, 245, 245);
         pdf.rect(this.MARGIN, y, tableWidth, rowHeight, 'F');
       }
-      
+
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
-      
+
       x = this.MARGIN;
-      pdf.text(`V-${i + 1}`, x + w/2, y + 5, { align: 'center' }); x += w;
-      pdf.text(`V${i+1}-V${next+1}`, x + w/2, y + 5, { align: 'center' }); x += w;
-      pdf.text(v[0].toFixed(3), x + w/2, y + 5, { align: 'center' }); x += w;
-      pdf.text(v[1].toFixed(3), x + w/2, y + 5, { align: 'center' });
-      
+      const values = [
+        `V-${i + 1}`,
+        lindero?.tramo ?? `V${i + 1}-V${next + 1}`,
+        lindero ? `${lindero.longitudTexto}m` : '---',
+        toDMS(angulosInternos[i]),
+        v[0].toFixed(3),
+        v[1].toFixed(3),
+      ];
+      values.forEach((val, j) => {
+        pdf.text(val, x + colWidths[j] / 2, y + 5, { align: 'center' });
+        x += colWidths[j];
+      });
+
       y += rowHeight;
     });
-    
+
     // Borde final
     pdf.setDrawColor(200);
     pdf.rect(this.MARGIN, y - (vertices.length * rowHeight), tableWidth, vertices.length * rowHeight);

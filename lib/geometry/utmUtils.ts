@@ -156,6 +156,30 @@ export function calculateInteriorAngles(vertices: UTMCoordinate[]): number[] {
 }
 
 /**
+ * Formatea un ángulo en grados decimales a notación sexagesimal (D°M'S").
+ * Única fuente de verdad: antes vivía duplicada como closure local dentro
+ * de PlanoPerimetricoGeneratorV2 (cuadro técnico); ahora también la usa
+ * MemoriaDescriptiva para mostrar el mismo ángulo con el mismo formato.
+ */
+export function toDMS(deg: number): string {
+  let d = Math.floor(deg);
+  let mFloat = (deg - d) * 60;
+  let m = Math.floor(mFloat);
+  let s = Math.round((mFloat - m) * 60);
+
+  if (s === 60) {
+    s = 0;
+    m++;
+  }
+  if (m === 60) {
+    m = 0;
+    d++;
+  }
+
+  return `${d}°${String(m).padStart(2, '0')}'${String(s).padStart(2, '0')}"`;
+}
+
+/**
  * Obtiene el bounding box de un conjunto de vértices
  */
 export function getBoundingBox(vertices: UTMCoordinate[]): {

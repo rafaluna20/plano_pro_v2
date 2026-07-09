@@ -24,6 +24,7 @@ import {
   utmToLatLng,
   calculateInteriorAngles,
   DEFAULT_UTM_ZONE,
+  toDMS,
 } from "@/lib/geometry/utmUtils";
 import { MapService } from "@/lib/services/MapService";
 import { PLANO_THEME, getGridInterval } from "@/lib/config/PlanoTheme";
@@ -798,18 +799,9 @@ export class PlanoPerimetricoGeneratorV2 {
     });
     y += TABLA_TECNICA.HEADER_HEIGHT;
 
-    // Sub-header - Con columnas: VERT, LADO, DIST, ANG, COLINDANCIA, ESTE, NORTE
-    const cols = [
-      "V.",
-      "LADO",
-      "DIST.",
-      "ANG.",
-      "COLINDANCIA",
-      "ESTE (X)",
-      "NORTE (Y)",
-    ];
-    // Ajuste de anchos: DIST y ANG +30% (aprox). V, ESTE, NORTE reducidos para compensar.
-    const colW = [6, 10, 14, 13, 19, 20, 20].map((p) => (w * p) / 100);
+    // Sub-header - Con columnas: VERT, LADO, DIST, ANG, ESTE, NORTE
+    const cols = ["V.", "LADO", "DIST.", "ANG.", "ESTE (X)", "NORTE (Y)"];
+    const colW = [7, 12, 17, 16, 24, 24].map((p) => (w * p) / 100);
 
     const headerColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_HEADER);
     pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
@@ -841,24 +833,6 @@ export class PlanoPerimetricoGeneratorV2 {
 
     let totalLength = 0;
     let totalAngle = 0;
-
-    const toDMS = (deg: number): string => {
-      let d = Math.floor(deg);
-      let mFloat = (deg - d) * 60;
-      let m = Math.floor(mFloat);
-      let s = Math.round((mFloat - m) * 60);
-
-      if (s === 60) {
-        s = 0;
-        m++;
-      }
-      if (m === 60) {
-        m = 0;
-        d++;
-      }
-
-      return `${d}°${String(m).padStart(2, "0")}'${String(s).padStart(2, "0")}"`;
-    };
 
     this.datosProcesados.linderosFinal.forEach(
       (lindero: LinderoRegistral, i: number) => {
@@ -902,10 +876,8 @@ export class PlanoPerimetricoGeneratorV2 {
         totalAngle += angDeg;
 
         drawCell(toDMS(angDeg), colW[3]);
-        // ⭐ MOSTRAR colindanciaTexto
-        drawCell(lindero.colindanciaTexto, colW[4], 5); // Fuente más pequeña para colindancia
-        drawCell(vertices[vertexIdx][0].toFixed(2), colW[5]);
-        drawCell(vertices[vertexIdx][1].toFixed(2), colW[6]);
+        drawCell(vertices[vertexIdx][0].toFixed(2), colW[4]);
+        drawCell(vertices[vertexIdx][1].toFixed(2), colW[5]);
 
         y += TABLA_TECNICA.ROW_HEIGHT;
       },

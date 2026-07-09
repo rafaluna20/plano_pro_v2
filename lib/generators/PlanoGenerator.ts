@@ -96,7 +96,7 @@ export class PlanoGenerator {
       }> = [
           {
             condition: !!this.config.incluirMemoriaDescriptiva,
-            generator: new MemoriaDescriptivaGenerator(this.request, this.config),
+            generator: new MemoriaDescriptivaGenerator(this.request, this.config, datosProcesados),
             format: this.config.formatosPersonalizados!.memoriaDescriptiva as { formato: any; orientacion: any },
             name: 'Memoria Descriptiva'
           },
