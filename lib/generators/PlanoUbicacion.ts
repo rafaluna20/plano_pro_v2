@@ -5,6 +5,7 @@ import { CADDrawing } from '@/lib/geometry/cadDrawing';
 import { calculateCentroid, utmToLatLng, getBoundingBox, DEFAULT_UTM_ZONE } from '@/lib/geometry/utmUtils';
 import { utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { MapService } from '@/lib/services/MapService';
+import { PLANO_THEME } from '@/lib/config/PlanoTheme';
 
 /**
  * Generador de Plano de Ubicación Profesional
@@ -158,7 +159,9 @@ export class PlanoUbicacionGenerator {
 
     // Título Central
     pdf.setFillColor(255, 255, 255);
-    pdf.rect(drawingArea.x + drawingArea.width/2 - 40, drawingArea.y + 5, 80, 8, 'F');
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
+    pdf.rect(drawingArea.x + drawingArea.width/2 - 40, drawingArea.y + 5, 80, 8, 'FD');
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(14);
     pdf.setTextColor(0, 0, 0);

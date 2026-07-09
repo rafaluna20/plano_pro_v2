@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { DatosProcesados } from '@/lib/services/PlanoDataProcessor';
 import { calculateInteriorAngles, toDMS } from '@/lib/geometry/utmUtils';
+import { CADDrawing } from '@/lib/geometry/cadDrawing';
 
 /**
  * Generador de Memoria Descriptiva - Proyecto Terra Lima
@@ -37,7 +38,7 @@ export class MemoriaDescriptivaGenerator {
     // --- PÁGINA 1 ---
     
     // 1. Encabezado
-    this.drawHeader(pdf, lote);
+    await this.drawHeader(pdf, lote);
     
     let y = 70; // Posición inicial después del header
 
@@ -57,7 +58,7 @@ export class MemoriaDescriptivaGenerator {
     // 3. SECCIONES (Iteramos lógica para manejo de saltos de página)
     
     // --- I. GENERALIDADES ---
-    y = this.checkPageBreak(pdf, y, pageHeight, lote);
+    y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'I. GENERALIDADES', y);
     
     const generalText = `La presente Memoria Descriptiva tiene por objeto describir técnica y legalmente el lote de terreno urbano, delimitando sus linderos y medidas perimétricas, así como su ubicación y área, el cual forma parte del proyecto inmobiliario "TERRA LIMA".`;
@@ -65,7 +66,7 @@ export class MemoriaDescriptivaGenerator {
     y += this.SECTION_GAP;
 
     // --- II. IDENTIFICACIÓN Y UBICACIÓN ---
-    y = this.checkPageBreak(pdf, y, pageHeight, lote);
+    y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'II. IDENTIFICACIÓN Y UBICACIÓN DEL PREDIO', y);
 
     const ubicacionData = [
@@ -84,7 +85,7 @@ export class MemoriaDescriptivaGenerator {
     y += this.SECTION_GAP;
 
     // --- III. LINDEROS Y MEDIDAS PERIMÉTRICAS ---
-    y = this.checkPageBreak(pdf, y, pageHeight, lote);
+    y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'III. LINDEROS Y MEDIDAS PERIMÉTRICAS', y);
 
     pdf.setFontSize(10);
@@ -93,8 +94,8 @@ export class MemoriaDescriptivaGenerator {
     y += this.LINE_HEIGHT * 1.5;
 
     // Iterar sobre las colindancias del JSON (Frente, Fondo, Derecha, Izquierda)
-    colindancias.forEach((col) => {
-      y = this.checkPageBreak(pdf, y, pageHeight, lote);
+    for (const col of colindancias) {
+      y = await this.checkPageBreak(pdf, y, pageHeight, lote);
 
       const lado = col.lado.toUpperCase(); // FRENTE, DERECHA, etc.
 
@@ -122,12 +123,12 @@ export class MemoriaDescriptivaGenerator {
       pdf.text(lines, this.MARGIN + 40, y);
 
       y += (lines.length * this.LINE_HEIGHT) + 2;
-    });
+    }
 
     y += this.SECTION_GAP;
 
     // --- IV. ÁREA Y PERÍMETRO ---
-    y = this.checkPageBreak(pdf, y, pageHeight, lote);
+    y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'IV. ÁREA Y PERÍMETRO', y);
 
     const areasData = [
@@ -142,7 +143,7 @@ export class MemoriaDescriptivaGenerator {
     const tableHeight = (vertices.length * 7) + 20;
     if (y + tableHeight > pageHeight - 50) {
       pdf.addPage();
-      this.drawHeader(pdf, lote);
+      await this.drawHeader(pdf, lote);
       y = 70;
     }
     
@@ -152,7 +153,7 @@ export class MemoriaDescriptivaGenerator {
 
     // --- VI. PROPIETARIO ---
     if (propietario) {
-      y = this.checkPageBreak(pdf, y, pageHeight, lote);
+      y = await this.checkPageBreak(pdf, y, pageHeight, lote);
       y = this.drawSectionTitle(pdf, 'VI. DEL PROPIETARIO', y);
       
       const propData = [
@@ -173,37 +174,66 @@ export class MemoriaDescriptivaGenerator {
   // MÉTODOS DE DIBUJO Y FORMATO
   // ===========================================================================
 
-  private drawHeader(pdf: jsPDF, lote: any): void {
+  private async drawHeader(pdf: jsPDF, lote: any): Promise<void> {
     const pageWidth = pdf.internal.pageSize.width;
-    
+    const [r, g, b] = this.COLOR_PRIMARY;
+
     // Marco superior
-    pdf.setDrawColor(this.COLOR_PRIMARY[0], this.COLOR_PRIMARY[1], this.COLOR_PRIMARY[2]);
+    pdf.setDrawColor(r, g, b);
     pdf.setLineWidth(0.8);
     pdf.rect(10, 10, pageWidth - 20, 45);
-    
+
     // Línea separadora vertical
     const splitX = 70;
     pdf.setLineWidth(0.2);
     pdf.line(splitX, 10, splitX, 55);
 
-    // LOGO (Texto estilizado o imagen si tuvieras)
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(18);
-    pdf.setTextColor(this.COLOR_PRIMARY[0], this.COLOR_PRIMARY[1], this.COLOR_PRIMARY[2]);
-    pdf.text('TERRA', 25, 28);
-    pdf.text('LIMA', 25, 36);
-    
+    // LOGO: imagen real (contain-fit, sin deformación) con fallback a
+    // logotipo de texto. Misma identidad visual que ya usan el Plano
+    // Perimétrico y el Plano de Ubicación en su membrete — antes la Memoria
+    // era el único de los 3 documentos del expediente que mostraba un
+    // logotipo de texto en vez del logo real.
+    const logoBoxX = 14;
+    const logoBoxY = 13;
+    const logoBoxW = splitX - logoBoxX - 4;
+    const logoBoxH = 24;
+    const logoCenterX = logoBoxX + logoBoxW / 2;
+    let logoDrawn = false;
+
+    if (this.config.logoUrl) {
+      try {
+        const res = await fetch(this.config.logoUrl);
+        if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+        const buffer = await res.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        const contentType = res.headers.get('content-type') || '';
+        const format = contentType.includes('png') ? 'PNG' : 'JPEG';
+        new CADDrawing(pdf).drawImageContained(data, format, logoBoxX, logoBoxY, logoBoxW, logoBoxH);
+        logoDrawn = true;
+      } catch (err) {
+        console.warn('Fallo al cargar logoUrl en Memoria Descriptiva:', err);
+      }
+    }
+
+    if (!logoDrawn) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(18);
+      pdf.setTextColor(r, g, b);
+      pdf.text('TERRA', logoCenterX, 28, { align: 'center' });
+      pdf.text('LIMA', logoCenterX, 36, { align: 'center' });
+    }
+
     pdf.setFontSize(8);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('Desarrollo Inmobiliario', 23, 42);
+    pdf.setTextColor(r, g, b);
+    pdf.text('Desarrollo Inmobiliario', logoCenterX, 42, { align: 'center' });
 
     // DATOS DEL DOCUMENTO (Lado Derecho)
     const dataX = splitX + 5;
     let dataY = 18;
-    
+
     pdf.setFontSize(9);
-    pdf.setTextColor(0);
-    
+
     const headerData = [
       { l: 'PROYECTO:', v: 'TERRA LIMA' },
       { l: 'DOCUMENTO:', v: 'MEMORIA DESCRIPTIVA' },
@@ -211,10 +241,17 @@ export class MemoriaDescriptivaGenerator {
       { l: 'FECHA:', v: new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' }) }
     ];
 
+    // Color fijado explícitamente en cada línea (no heredado de una llamada
+    // anterior): label en el gris corporativo, valor en negro puro para
+    // máximo contraste. Antes solo se fijaba una vez antes del forEach, lo
+    // que dependía de que ninguna otra rutina hubiera cambiado el color del
+    // canvas entretanto.
     headerData.forEach(item => {
       pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(r, g, b);
       pdf.text(item.l, dataX, dataY);
       pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(0, 0, 0);
       pdf.text(item.v, dataX + 30, dataY);
       dataY += 8;
     });
@@ -368,10 +405,10 @@ export class MemoriaDescriptivaGenerator {
     pdf.text(String(pdf.getCurrentPageInfo().pageNumber), pageWidth - this.MARGIN, pageHeight - 10, { align: 'right' });
   }
 
-  private checkPageBreak(pdf: jsPDF, currentY: number, pageHeight: number, lote: any): number {
+  private async checkPageBreak(pdf: jsPDF, currentY: number, pageHeight: number, lote: any): Promise<number> {
     if (currentY > pageHeight - 50) {
       pdf.addPage();
-      this.drawHeader(pdf, lote);
+      await this.drawHeader(pdf, lote);
       return 70; // Nuevo Y inicial
     }
     return currentY;

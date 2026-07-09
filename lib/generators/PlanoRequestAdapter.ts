@@ -17,7 +17,7 @@ import { DEFAULT_UTM_ZONE } from '@/lib/geometry/utmUtils';
 // Logo por defecto (Akallpa) para el membrete, si el caller no manda uno
 // propio en config.logoUrl. Subido a Vercel Blob (mismo storage que usan
 // los PDFs generados) para tener una URL pública permanente.
-const DEFAULT_LOGO_URL = 'https://uaqvcyzkl4dd5hx4.public.blob.vercel-storage.com/branding/logo-akallpa.png';
+export const DEFAULT_LOGO_URL = 'https://uaqvcyzkl4dd5hx4.public.blob.vercel-storage.com/branding/logo-akallpa.png';
 
 /**
  * Adaptador para transformar solicitudes legacy (V1) al nuevo formato híbrido (V2).
@@ -146,6 +146,7 @@ export class PlanoRequestAdapter {
                             properties: {
                                 tipo: el.tipo === 'AREA_VERDE' ? 'area_verde' : 'lote', // Mapeo simple
                                 nombre: el.texto,
+                                numeroLote: el.texto, // Etiqueta visible en Plano Perimétrico (renderContext)
                                 descripcionAlterna: el.texto
                             },
                             geometry: {

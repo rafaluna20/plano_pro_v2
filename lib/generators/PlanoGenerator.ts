@@ -3,7 +3,7 @@ import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { MemoriaDescriptivaGenerator } from './MemoriaDescriptiva';
 import { PlanoPerimetricoGeneratorV2 } from './PlanoPerimetricoGeneratorV2';
 import { PlanoUbicacionGenerator } from './PlanoUbicacion';
-import { PlanoRequestAdapter } from './PlanoRequestAdapter';
+import { PlanoRequestAdapter, DEFAULT_LOGO_URL } from './PlanoRequestAdapter';
 import { procesarDatosPlano } from '@/lib/services/PlanoDataProcessor';
 
 // Interfaz para estandarizar los generadores hijos
@@ -37,6 +37,12 @@ export class PlanoGenerator {
       incluirPlanoUbicacion: true,
       incluirColindantesEnPlano: true,
       ...inputConfig,
+      // Mismo logo por defecto que ya usan el Plano Perimétrico y el Plano
+      // de Ubicación (vía PlanoRequestAdapter.mapConfig), para que la
+      // Memoria Descriptiva muestre la misma identidad de marca. Se calcula
+      // después del spread para no depender de si inputConfig trae la
+      // clave `logoUrl` explícitamente en `undefined`.
+      logoUrl: inputConfig?.logoUrl || DEFAULT_LOGO_URL,
     };
 
     // Definimos los formatos específicos si no vienen en el request
