@@ -200,7 +200,13 @@ export class PlanoPerimetricoGeneratorV2Copia {
     this.drawVerticesAndDimensions(pdf, paperPoints, cad);
 
     // F. Título y Norte
-    this.drawTitle(pdf, layout.drawingArea, "PLANO PERIMÉTRICO - COPIA", paperPoints);
+    this.drawTitle(
+      pdf,
+      layout.drawingArea,
+      "PLANO DE UBICACIÓN",
+      paperPoints,
+      escalaMain.escala,
+    );
     this.drawNorthCatastro(
       pdf,
       layout.drawingArea.x +
@@ -261,7 +267,13 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
     const titleBarHeight = LAYOUT.ALTURAS.HEADER;
     const ubicacionHeight = LAYOUT.ALTURAS.UBICACION;
-    const membreteHeight = LAYOUT.ALTURAS.MEMBRETE;
+    // +15mm sobre el membrete estándar: la fila "Datos de lote / LÁMINA" se
+    // duplicó de 10 a 20mm, y la fila DATUM/Zona/Escala/Fecha pasó de 1 fila
+    // de 4 columnas a una grilla de 2x2 (10mm) — ver drawProfessionalMembrete.
+    // Se resta del cuadro técnico (cuadroTecnicoHeight, más abajo), que es
+    // el único bloque con alto "elástico" en este layout — solo afecta a
+    // esta copia.
+    const membreteHeight = LAYOUT.ALTURAS.MEMBRETE + 15;
 
     const cuadroTecnicoHeight =
       pageHeight -
@@ -615,14 +627,15 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
     const rawScale = 1000 / escalaNominal;
 
-    // Escala fuera del recuadro (debajo del nombre "CROQUIS DE UBICACIÓN",
-    // que también va debajo del marco — ver drawLocationHeader).
+    // Escala fuera del recuadro (debajo del nombre "PLANO DE LOCALIZACIÓN",
+    // que también va debajo del marco — ver drawLocationHeader). Mismo
+    // formato "ESCALA: 1/N" que el título principal, para consistencia.
     const frameHeightCaption = this.getUbicacionFrameHeight(area);
     pdf.setFontSize(6);
     pdf.setTextColor(0);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(
-      `(E Aprox 1:${escalaNominal})`,
+      `ESCALA: 1/${escalaNominal}`,
       area.x + area.width / 2,
       area.y + frameHeightCaption + 7.5,
       { align: "center" },
@@ -733,11 +746,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
   }
 
   // Alto reservado DEBAJO del recuadro del croquis para el nombre
-  // "CROQUIS DE UBICACIÓN" y la escala aproximada (ambos fuera del marco,
-  // no encimados con el dibujo ni con la barra de título). Se resta del
-  // mismo alto total ya asignado al bloque (UBICACION.ALTURAS), así el
-  // recuadro queda más chico pero nada se sale de su espacio ni choca con
-  // el cuadro técnico de abajo.
+  // "PLANO DE LOCALIZACIÓN" y su escala (ambos fuera del marco, no
+  // encimados con el dibujo ni con la barra de título). Se resta del mismo
+  // alto total ya asignado al bloque (UBICACION.ALTURAS), así el recuadro
+  // queda más chico pero nada se sale de su espacio ni choca con el
+  // cuadro técnico de abajo.
   private readonly UBICACION_CAPTION_RESERVE = 9;
 
   private getUbicacionFrameHeight(area: AreaDibujo): number {
@@ -752,13 +765,13 @@ export class PlanoPerimetricoGeneratorV2Copia {
     pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     pdf.rect(area.x, area.y, area.width, frameHeight);
 
-    // Nombre del croquis, debajo del recuadro (antes iba en una barra
-    // dentro del marco, arriba).
+    // Nombre del plano, debajo del recuadro (antes iba en una barra dentro
+    // del marco, arriba; y se llamaba "CROQUIS DE UBICACIÓN").
     pdf.setTextColor(0);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.LABEL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(
-      "CROQUIS DE UBICACIÓN",
+      "PLANO DE LOCALIZACIÓN",
       area.x + area.width / 2,
       area.y + frameHeight + 3.5,
       { align: "center" },
@@ -971,6 +984,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // de la línea cae el interior, no para geometría de precisión.
     const centroidEtiquetas = this.calculateVisualCenter(paperPoints);
     const INWARD_LABEL_OFFSET = 3; // mm hacia adentro del lote
+    const SIDE_LABEL_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.7; // +70% a pedido
 
     this.datosProcesados.linderosFinal.forEach(
       (lindero: LinderoRegistral, i: number) => {
@@ -1015,7 +1029,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
         const my = midY + fperpY * INWARD_LABEL_OFFSET;
 
         const textStr = `${lindero.longitudTexto}m`;
-        pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+        pdf.setFontSize(SIDE_LABEL_FONT);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
         const textWidth = pdf.getTextWidth(textStr);
 
@@ -1031,8 +1045,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
         // (adelante/perpendicular) del texto rotado, y se llama a text() sin
         // align/baseline (default "left"/"alphabetic" con el ancla
         // ya pre-corrida).
-        const fontHeightMm =
-          PLANO_THEME.FONTS.SIZES.SMALL / pdf.internal.scaleFactor;
+        const fontHeightMm = SIDE_LABEL_FONT / pdf.internal.scaleFactor;
         const middleOffset = fontHeightMm * 0.35; // height/2 - height*0.15 (lineHeightFactor=1.15)
         const halfWidth = textWidth / 2;
         const anchorX = mx + fperpX * middleOffset - fux * halfWidth;
@@ -1053,51 +1066,61 @@ export class PlanoPerimetricoGeneratorV2Copia {
     pdf: jsPDF,
     paperPoints: [number, number][],
   ): void {
-    const { ETIQUETA_CENTRAL } = PLANO_THEME;
     const center = this.calculatePoleOfInaccessibility(paperPoints);
+    const loteProps = this.payload.loteObjetivo.properties;
+
+    // Fuente de "A = .../P = ..." aumentada 50% a pedido (SMALL 6pt -> 9pt).
+    // La caja y el espaciado se recalculan a partir del ancho real del texto
+    // (en vez de PLANO_THEME.ETIQUETA_CENTRAL, pensado para la fuente
+    // original) para que no se desborden con la fuente más grande; el tema
+    // compartido no se toca, así el Plano Perimétrico oficial no cambia.
+    const AREA_PERIMETRO_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.5;
+    const LOTE_FONT = PLANO_THEME.FONTS.SIZES.BODY;
+    const lineSpacing = PLANO_THEME.ETIQUETA_CENTRAL.LINE_SPACING * 1.5;
+
+    const perimetroVisual = this.datosProcesados.linderosFinal.reduce(
+      (sum, l) => sum + parseFloat(l.longitudTexto),
+      0,
+    );
+    const loteText = `LOTE ${loteProps.identificador.lote}`;
+    const areaText = `A = ${this.datosProcesados.areaFinal.toFixed(2)} m²`;
+    const perimText = `P = ${perimetroVisual.toFixed(2)} ml`;
+
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(LOTE_FONT);
+    const loteWidth = pdf.getTextWidth(loteText);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
+    pdf.setFontSize(AREA_PERIMETRO_FONT);
+    const areaWidth = pdf.getTextWidth(areaText);
+    const perimWidth = pdf.getTextWidth(perimText);
+
+    const PADDING_H = 3;
+    const boxWidth = Math.max(loteWidth, areaWidth, perimWidth) + PADDING_H * 2;
+    const loteY = center.y - 3;
+    const areaY = center.y + 2;
+    const perimY = areaY + lineSpacing;
+    const boxHeight = perimY - loteY + 6; // margen arriba/abajo del contenido
 
     pdf.setFillColor(255, 255, 255);
     pdf.setDrawColor(0);
     pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
     pdf.rect(
-      center.x - ETIQUETA_CENTRAL.WIDTH / 2,
-      center.y - ETIQUETA_CENTRAL.HEIGHT / 2,
-      ETIQUETA_CENTRAL.WIDTH,
-      ETIQUETA_CENTRAL.HEIGHT,
+      center.x - boxWidth / 2,
+      center.y - boxHeight / 2,
+      boxWidth,
+      boxHeight,
       "FD",
     );
 
-    const loteProps = this.payload.loteObjetivo.properties;
-
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.setFontSize(LOTE_FONT);
     pdf.setTextColor(0);
-    pdf.text(`LOTE ${loteProps.identificador.lote}`, center.x, center.y - 2, {
-      align: "center",
-    });
+    pdf.text(loteText, center.x, loteY, { align: "center" });
 
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-
-    // ⭐ USAR datos procesados (registral > calculado)
-    // Recalcular perímetro suma visual para coincidencia exacta
-    const perimetroVisual = this.datosProcesados.linderosFinal.reduce(
-      (sum, l) => sum + parseFloat(l.longitudTexto),
-      0,
-    );
-
-    pdf.text(
-      `A = ${this.datosProcesados.areaFinal.toFixed(2)} m²`,
-      center.x,
-      center.y + 1,
-      { align: "center" },
-    );
-    pdf.text(
-      `P = ${perimetroVisual.toFixed(2)} ml`,
-      center.x,
-      center.y + ETIQUETA_CENTRAL.LINE_SPACING,
-      { align: "center" },
-    );
+    pdf.setFontSize(AREA_PERIMETRO_FONT);
+    pdf.text(areaText, center.x, areaY, { align: "center" });
+    pdf.text(perimText, center.x, perimY, { align: "center" });
   }
 
   private drawHeaderTitleBar(pdf: jsPDF, area: AreaDibujo): void {
@@ -1225,11 +1248,23 @@ export class PlanoPerimetricoGeneratorV2Copia {
     cy += proyectoH;
     pdf.line(x, cy, x + w, cy);
 
-    // 4. Datos de lote (izquierda) + LÁMINA (derecha)
+    // 4. Datos de lote (izq., arriba) + grilla 2x2 DATUM/Zona/Escala/Fecha
+    // (izq., abajo) + LÁMINA (derecha, altura completa de todo el bloque) —
+    // igual a la imagen de referencia: antes DATUM/Zona/Escala/Fecha era
+    // una sola fila de 4 columnas que cruzaba por debajo de LÁMINA.
     const laminaColX = x + w * 0.72;
-    const datosLoteH = 10;
-    pdf.line(laminaColX, cy, laminaColX, cy + datosLoteH);
+    const datosLoteH = 20; // duplicado a pedido (antes 10mm)
+    const datumRowH = 5; // cada una de las 2 filas de la grilla 2x2
+    const datumGridH = datumRowH * 2;
+    const combinedBlockH = datosLoteH + datumGridH;
 
+    // Línea vertical de LÁMINA: cubre todo el bloque combinado (Datos de
+    // lote + grilla DATUM), no solo la fila superior.
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
+    pdf.line(laminaColX, cy, laminaColX, cy + combinedBlockH);
+
+    // --- Datos de lote (arriba, izquierda) ---
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.text("Datos de lote:", labelX, cy + 3.2);
@@ -1245,56 +1280,66 @@ export class PlanoPerimetricoGeneratorV2Copia {
       cy + 9.2,
     );
 
+    // --- LÁMINA / PU-01, centrado en TODO el bloque combinado ---
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-    pdf.text("LÁMINA:", laminaColX + (x + w - laminaColX) / 2, cy + 3, {
-      align: "center",
-    });
+    pdf.text(
+      "LÁMINA:",
+      laminaColX + (x + w - laminaColX) / 2,
+      cy + combinedBlockH / 2 - 2.75,
+      { align: "center" },
+    );
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.H2);
-    pdf.text("PU - 01", laminaColX + (x + w - laminaColX) / 2, cy + 8.5, {
-      align: "center",
-    });
+    pdf.text(
+      "PU - 01",
+      laminaColX + (x + w - laminaColX) / 2,
+      cy + combinedBlockH / 2 + 2.75,
+      { align: "center" },
+    );
 
     cy += datosLoteH;
     pdf.setDrawColor(0);
-    pdf.line(x, cy, x + w, cy);
+    // Separador entre "Datos de lote" y la grilla DATUM: solo hasta
+    // laminaColX (la columna de LÁMINA sigue de corrido, sin cortarse).
+    pdf.line(x, cy, laminaColX, cy);
 
-    // 5. Datum / Zona / Escala / Fecha (fila de 4 columnas, label y valor en
-    // la MISMA línea — como en la imagen de referencia; antes iban en dos
-    // líneas apiladas y el bloque no tenía alto suficiente reservado, así
-    // que el valor se dibujaba fuera de su celda, encima del borde inferior
-    // del membrete).
-    const datumH = h - (cy - y);
-    const datumTextY = cy + datumH / 2 + 1.5;
-    const col1 = x + w * 0.28;
-    const col2 = x + w * 0.55;
-    const col3 = x + w * 0.78;
-    pdf.setDrawColor(0);
-    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
-    pdf.line(col1, cy, col1, cy + datumH);
-    pdf.line(col2, cy, col2, cy + datumH);
-    pdf.line(col3, cy, col3, cy + datumH);
-
+    // --- Grilla 2x2: DATUM/Zona Geográfica (fila 1), Escala/Fecha (fila 2),
+    // confinada al ancho izquierdo (hasta laminaColX) ---
     const zonaUTM = this.getZonaUTM();
     const fechaMesAnio = new Date().toLocaleDateString("es-PE", {
       month: "long",
       year: "numeric",
     });
 
+    const gridColMid = x + (laminaColX - x) / 2;
+    pdf.line(gridColMid, cy, gridColMid, cy + datumGridH);
+
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-    const drawDatumCell = (colX: number, label: string, value: string) => {
+    const drawDatumCell = (
+      colX: number,
+      rowY: number,
+      label: string,
+      value: string,
+    ) => {
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-      pdf.text(label, colX, datumTextY);
+      pdf.text(label, colX, rowY);
       const labelW = pdf.getTextWidth(label);
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-      pdf.text(value, colX + labelW + 1.5, datumTextY);
+      pdf.text(value, colX + labelW + 1.5, rowY);
     };
 
-    drawDatumCell(labelX, "DATUM:", "WGS 84");
-    drawDatumCell(col1 + 1.5, "Zona Geográfica:", `${zonaUTM}S`);
-    drawDatumCell(col2 + 1.5, "Escala:", "Indicada");
-    drawDatumCell(col3 + 1.5, "Fecha:", fechaMesAnio);
+    // Fila 1: DATUM | Zona Geográfica
+    const row1Y = cy + datumRowH / 2 + 1.5;
+    drawDatumCell(labelX, row1Y, "DATUM:", "WGS 84");
+    drawDatumCell(gridColMid + 1.5, row1Y, "Zona Geográfica:", `${zonaUTM}S`);
+    cy += datumRowH;
+    pdf.line(x, cy, laminaColX, cy);
+
+    // Fila 2: Escala | Fecha
+    const row2Y = cy + datumRowH / 2 + 1.5;
+    drawDatumCell(labelX, row2Y, "Escala:", "Indicada");
+    drawDatumCell(gridColMid + 1.5, row2Y, "Fecha:", fechaMesAnio);
   }
 
   private drawRealUTMGrid(
@@ -1384,6 +1429,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     area: AreaDibujo,
     title: string,
     paperPoints?: Array<[number, number]>,
+    escalaValue?: number,
   ): void {
     const { TITULO } = PLANO_THEME;
 
@@ -1403,24 +1449,48 @@ export class PlanoPerimetricoGeneratorV2Copia {
       titleY = Math.min(Math.max(desiredY, defaultTitleY), maxAllowedY);
     }
 
-    pdf.setFillColor(255, 255, 255);
-    pdf.setDrawColor(0);
-    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     const fontSize = PLANO_THEME.FONTS.SIZES.H1;
     const titleWidth =
       (pdf.getStringUnitWidth(title) * fontSize) / pdf.internal.scaleFactor;
-    pdf.rect(
-      centerX - titleWidth / 2 - TITULO.PADDING_H,
-      titleY - TITULO.PADDING_V,
-      titleWidth + TITULO.PADDING_H * 2,
-      TITULO.BOX_HEIGHT,
-      "FD",
-    );
+
+    // Fila de escala debajo del título (a pedido, ej. "ESCALA: 1/200"),
+    // separada por una línea horizontal — mismo recuadro, más alto.
+    const escalaText = escalaValue ? `ESCALA: 1/${escalaValue}` : null;
+    const escalaFontSize = PLANO_THEME.FONTS.SIZES.BODY;
+    const escalaRowHeight = escalaText ? 6 : 0;
+    const escalaWidth = escalaText
+      ? (pdf.getStringUnitWidth(escalaText) * escalaFontSize) /
+        pdf.internal.scaleFactor
+      : 0;
+
+    const boxWidth =
+      Math.max(titleWidth, escalaWidth) + TITULO.PADDING_H * 2;
+    const boxHeight = TITULO.BOX_HEIGHT + escalaRowHeight;
+    const boxX = centerX - boxWidth / 2;
+    const boxY = titleY - TITULO.PADDING_V;
+
+    pdf.setFillColor(255, 255, 255);
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
+    pdf.rect(boxX, boxY, boxWidth, boxHeight, "FD");
 
     pdf.setFontSize(fontSize);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setTextColor(0, 0, 0);
     pdf.text(title, centerX, titleY, { align: "center" });
+
+    if (escalaText) {
+      const dividerY = boxY + TITULO.BOX_HEIGHT;
+      pdf.line(boxX, dividerY, boxX + boxWidth, dividerY);
+
+      pdf.setFontSize(escalaFontSize);
+      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+      pdf.text(
+        escalaText,
+        boxX + TITULO.PADDING_H,
+        dividerY + escalaRowHeight / 2 + 1.5,
+      );
+    }
   }
 
   private drawNorthCatastro(pdf: jsPDF, x: number, y: number, s: number): void {
@@ -1454,8 +1524,10 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // disponible (ajuste "a presión"), lo que lo hacía ver grande/apretado
     // contra el marco. 1.15 deja ~15% de aire extra alrededor, así el lote
     // sale un poco más pequeño y con más contexto visible sin tocar el
-    // recuadro.
-    const ZOOM_OUT_PADDING = 1.15;
+    // recuadro. En esta copia se pidió alejar un 30% adicional, así que se
+    // multiplica: 1.15 * 1.30 ≈ 1.495 (solo afecta a esta copia, no al
+    // Plano Perimétrico oficial).
+    const ZOOM_OUT_PADDING = 1.15 * 1.3;
     const raw = Math.max(scaleX, scaleY) * ZOOM_OUT_PADDING;
 
     const scales = [
