@@ -324,13 +324,30 @@ export class PlanoPerimetricoGeneratorV2 {
         return [centerX + dx, centerY - dy] as [number, number];
       });
 
-      // Diferenciar entre calles y lotes
+      // Diferenciar entre calles, áreas verdes y lotes
       if (feature.properties.tipo === "calle") {
         cad.drawPolygon(paperPoints, {
           strokeColor: PLANO_THEME.COLORS.SECONDARY,
           lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
           fillColor: "#F9F9F9",
         });
+      } else if (feature.properties.tipo === "area_verde") {
+        cad.drawPolygon(paperPoints, {
+          strokeColor: PLANO_THEME.COLORS.NEIGHBOR_STROKE,
+          lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
+          fillColor: "#D4EDD4", // verde suave, distinto del gris de lotes vecinos
+        });
+
+        if (feature.properties.numeroLote) {
+          const center = this.calculateVisualCenter(paperPoints);
+          pdf.setTextColor(
+            parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16),
+          );
+          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+          pdf.text(feature.properties.numeroLote, center.x, center.y, {
+            align: "center",
+          });
+        }
       } else {
         cad.drawPolygon(paperPoints, {
           strokeColor: PLANO_THEME.COLORS.NEIGHBOR_STROKE,
@@ -679,12 +696,19 @@ export class PlanoPerimetricoGeneratorV2 {
       if (pts.length < 2) return;
 
       const isCalle = feature.properties.tipo === "calle";
+      const isAreaVerde = feature.properties.tipo === "area_verde";
 
       // Estilos semánticos desde THEME
       if (isCalle) {
         pdf.setDrawColor(200);
         pdf.setLineWidth(0.05);
         pdf.setFillColor(250, 250, 250);
+      } else if (isAreaVerde) {
+        pdf.setDrawColor(
+          parseInt(PLANO_THEME.COLORS.NEIGHBOR_STROKE.slice(1, 3), 16),
+        );
+        pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
+        pdf.setFillColor(212, 237, 212); // verde suave (#D4EDD4)
       } else {
         pdf.setDrawColor(
           parseInt(PLANO_THEME.COLORS.NEIGHBOR_STROKE.slice(1, 3), 16),

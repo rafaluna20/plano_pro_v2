@@ -57,8 +57,8 @@ export const PLANO_THEME = {
   // ============================================================================
   COLORS: {
     // Colores principales
-    PRIMARY: '#383838ff',           // Líneas principales, textos importantes
-    SECONDARY: '#686868ff',         // Textos secundarios
+    PRIMARY: '#383838',           // Líneas principales, textos importantes
+    SECONDARY: '#686868',         // Textos secundarios
     DIMMED: '#808080',           // Etiquetas de menor importancia
 
     // Fondos
@@ -78,7 +78,7 @@ export const PLANO_THEME = {
 
     // Colores especiales
     WHITE: '#FFFFFF',
-    BLACK: '#4e4d4dff',
+    BLACK: '#4e4d4d',
 
     // Debug (solo para desarrollo)
     DEBUG: '#FF0000'

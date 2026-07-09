@@ -144,7 +144,12 @@ export class PlanoRequestAdapter {
                         features.push({
                             type: 'Feature',
                             properties: {
-                                tipo: el.tipo === 'AREA_VERDE' ? 'area_verde' : 'lote', // Mapeo simple
+                                // Antes solo distinguía AREA_VERDE (todo lo
+                                // demás caía en 'lote', incluyendo CALLE) —
+                                // las calles reales enviadas por mapa_renasur
+                                // (elementosUrbanos) se dibujaban como si
+                                // fueran lotes vecinos comunes.
+                                tipo: el.tipo === 'AREA_VERDE' ? 'area_verde' : el.tipo === 'CALLE' ? 'calle' : 'lote',
                                 nombre: el.texto,
                                 numeroLote: el.texto, // Etiqueta visible en Plano Perimétrico (renderContext)
                                 descripcionAlterna: el.texto
