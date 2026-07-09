@@ -967,12 +967,17 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // Cotas (dimensiones) - USANDO longitudTexto REGISTRAL, orientadas en la
     // dirección real del lado que etiquetan (convención CAD estándar), en
     // vez de texto siempre horizontal sin relación visual con la línea.
+    // Centroide (aprox.) del lote: sirve solo para decidir hacia qué lado
+    // de la línea cae el interior, no para geometría de precisión.
+    const centroidEtiquetas = this.calculateVisualCenter(paperPoints);
+    const INWARD_LABEL_OFFSET = 3; // mm hacia adentro del lote
+
     this.datosProcesados.linderosFinal.forEach(
       (lindero: LinderoRegistral, i: number) => {
         const p = paperPoints[i];
         const next = paperPoints[(i + 1) % paperPoints.length];
-        const mx = (p[0] + next[0]) / 2;
-        const my = (p[1] + next[1]) / 2;
+        const midX = (p[0] + next[0]) / 2;
+        const midY = (p[1] + next[1]) / 2;
 
         const dx = next[0] - p[0];
         const dy = next[1] - p[1];
@@ -990,29 +995,29 @@ export class PlanoPerimetricoGeneratorV2Copia {
         const angleRad = (angleDeg * Math.PI) / 180;
         const fux = Math.cos(angleRad);
         const fuy = -Math.sin(angleRad);
-        const fperpX = -fuy;
-        const fperpY = fux;
+        let fperpX = -fuy;
+        let fperpY = fux;
+
+        // La perpendicular (fperpX, fperpY) puede apuntar hacia cualquiera
+        // de los dos lados de la línea según su orientación; se verifica
+        // contra el centroide y se invierte si hace falta para que SIEMPRE
+        // apunte hacia el interior del lote.
+        const toCentroidX = centroidEtiquetas.x - midX;
+        const toCentroidY = centroidEtiquetas.y - midY;
+        if (fperpX * toCentroidX + fperpY * toCentroidY < 0) {
+          fperpX = -fperpX;
+          fperpY = -fperpY;
+        }
+
+        // Punto medio del lado, desplazado hacia adentro del lote (antes la
+        // etiqueta se dibujaba justo sobre la línea del lindero).
+        const mx = midX + fperpX * INWARD_LABEL_OFFSET;
+        const my = midY + fperpY * INWARD_LABEL_OFFSET;
 
         const textStr = `${lindero.longitudTexto}m`;
         pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
         const textWidth = pdf.getTextWidth(textStr);
-
-        // Caja blanca de fondo, rotada igual que el texto (un rect sin rotar
-        // quedaría torcido respecto al texto en lados diagonales).
-        const halfW = textWidth / 2 + 1;
-        const halfH = 2;
-        const corners: [number, number][] = [
-          [mx - fux * halfW - fperpX * halfH, my - fuy * halfW - fperpY * halfH],
-          [mx + fux * halfW - fperpX * halfH, my + fuy * halfW - fperpY * halfH],
-          [mx + fux * halfW + fperpX * halfH, my + fuy * halfW + fperpY * halfH],
-          [mx - fux * halfW + fperpX * halfH, my - fuy * halfW + fperpY * halfH],
-        ];
-        cad.drawPolygon(corners, {
-          fillColor: PLANO_THEME.COLORS.WHITE,
-          strokeColor: PLANO_THEME.COLORS.WHITE,
-          lineWidth: 0.01,
-        });
 
         // NI align:"center" NI baseline:"middle" de jsPDF son seguros de usar
         // junto con angle: ambos calculan su desplazamiento sobre los ejes
@@ -1176,19 +1181,27 @@ export class PlanoPerimetricoGeneratorV2Copia {
       ["Manzana", loteProps.identificador.manzana],
       ["Lote", loteProps.identificador.lote],
     ];
-    const filaAltos = [3.5, 3.5, 3.5, 3.5, 6, 3.5, 3.5]; // mm, "Vía de acceso" ocupa 2 líneas
+    const filaAltos = [3.2, 3.2, 3.2, 3.2, 6, 3.2, 3.2]; // mm, "Vía de acceso" ocupa 2 líneas
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
 
+    // Línea base SIEMPRE a "rowH - 1mm" (nunca fija): así el texto queda a
+    // 1mm del borde inferior de su propia celda sin importar el alto de la
+    // fila, evitando que se dibuje encima/debajo del recuadro (el bug de
+    // la captura: el valor de una fila se salía de su celda porque el alto
+    // reservado era menor que la posición fija usada para el texto).
     datosFilas.forEach(([label, value], i) => {
       const rowH = filaAltos[i];
       const lineas = label.split("\n");
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
       pdf.setTextColor(0);
-      lineas.forEach((linea, li) => {
-        pdf.text(linea, labelX, cy + 3.2 + li * 3);
-      });
-      pdf.text(":", valueX - 2, cy + 3.2);
-      pdf.text(value, valueX, cy + 3.2);
+      if (lineas.length > 1) {
+        pdf.text(lineas[0], labelX, cy + rowH / 2 - 0.6);
+        pdf.text(lineas[1], labelX, cy + rowH - 1);
+      } else {
+        pdf.text(lineas[0], labelX, cy + rowH - 1);
+      }
+      pdf.text(":", valueX - 2, cy + rowH - 1);
+      pdf.text(value, valueX, cy + rowH - 1);
       cy += rowH;
       pdf.setDrawColor(200);
       pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
@@ -1247,11 +1260,18 @@ export class PlanoPerimetricoGeneratorV2Copia {
     pdf.setDrawColor(0);
     pdf.line(x, cy, x + w, cy);
 
-    // 5. Datum / Zona / Escala / Fecha (fila de 4 columnas)
+    // 5. Datum / Zona / Escala / Fecha (fila de 4 columnas, label y valor en
+    // la MISMA línea — como en la imagen de referencia; antes iban en dos
+    // líneas apiladas y el bloque no tenía alto suficiente reservado, así
+    // que el valor se dibujaba fuera de su celda, encima del borde inferior
+    // del membrete).
     const datumH = h - (cy - y);
+    const datumTextY = cy + datumH / 2 + 1.5;
     const col1 = x + w * 0.28;
     const col2 = x + w * 0.55;
     const col3 = x + w * 0.78;
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     pdf.line(col1, cy, col1, cy + datumH);
     pdf.line(col2, cy, col2, cy + datumH);
     pdf.line(col3, cy, col3, cy + datumH);
@@ -1262,18 +1282,19 @@ export class PlanoPerimetricoGeneratorV2Copia {
       year: "numeric",
     });
 
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-    pdf.text("DATUM:", labelX, cy + 3.5);
-    pdf.text("Zona Geográfica:", col1 + 1.5, cy + 3.5);
-    pdf.text("Escala:", col2 + 1.5, cy + 3.5);
-    pdf.text("Fecha:", col3 + 1.5, cy + 3.5);
+    const drawDatumCell = (colX: number, label: string, value: string) => {
+      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+      pdf.text(label, colX, datumTextY);
+      const labelW = pdf.getTextWidth(label);
+      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
+      pdf.text(value, colX + labelW + 1.5, datumTextY);
+    };
 
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-    pdf.text("WGS 84", labelX, cy + 7);
-    pdf.text(`${zonaUTM}S`, col1 + 1.5, cy + 7);
-    pdf.text("Indicada", col2 + 1.5, cy + 7);
-    pdf.text(fechaMesAnio, col3 + 1.5, cy + 7);
+    drawDatumCell(labelX, "DATUM:", "WGS 84");
+    drawDatumCell(col1 + 1.5, "Zona Geográfica:", `${zonaUTM}S`);
+    drawDatumCell(col2 + 1.5, "Escala:", "Indicada");
+    drawDatumCell(col3 + 1.5, "Fecha:", fechaMesAnio);
   }
 
   private drawRealUTMGrid(
