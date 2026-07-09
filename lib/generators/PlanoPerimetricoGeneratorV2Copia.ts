@@ -398,6 +398,17 @@ export class PlanoPerimetricoGeneratorV2Copia {
     const drawW = area.width - 1;
     const drawH = frameHeight - 1;
 
+    // Escala calculada UNA sola vez, fuera de los modos (vectorial/
+    // satelital/imagen): antes vivía solo dentro de renderVectorLocationSketch,
+    // así que la leyenda "ESCALA: 1/N" debajo de "PLANO DE LOCALIZACIÓN"
+    // nunca se dibujaba cuando el modo satelital/imagen lograba cargar su
+    // propia imagen (esas ramas no llaman a renderVectorLocationSketch).
+    const escalaNominalCroquis = this.calculateEscalaCroquis(
+      mainVertices,
+      drawW,
+      drawH,
+    );
+
     // 2. Fondo Blanco Preventivo (Fuera de clipping para asegurar que no haya negro heredado)
     pdf.setFillColor(255, 255, 255);
     pdf.rect(drawX, drawY, drawW, drawH, "F");
@@ -464,6 +475,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
                 drawH,
                 mainVertices,
                 area,
+                escalaNominalCroquis,
               );
             }
           } else {
@@ -475,6 +487,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
               drawH,
               mainVertices,
               area,
+              escalaNominalCroquis,
             );
           }
         } catch (error) {
@@ -487,6 +500,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
             drawH,
             mainVertices,
             area,
+            escalaNominalCroquis,
           );
         }
       } else if (modo === "imagen") {
@@ -521,6 +535,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
               drawH,
               mainVertices,
               area,
+              escalaNominalCroquis,
             );
           }
         } else {
@@ -532,6 +547,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
             drawH,
             mainVertices,
             area,
+            escalaNominalCroquis,
           );
         }
       } else {
@@ -543,18 +559,81 @@ export class PlanoPerimetricoGeneratorV2Copia {
           drawH,
           mainVertices,
           area,
+          escalaNominalCroquis,
         );
       }
     } finally {
       pdf.restoreGraphicsState();
     }
 
-    this.drawNorthCatastro(pdf, area.x + area.width - 8, area.y + 15, 8);
+    // Offset X aumentado (antes -8) para dar lugar a las etiquetas E/W de
+    // la nueva rosa vectorial de 8 puntas, que ocupa más ancho que la
+    // flecha simple anterior.
+    this.drawNorthCatastro(pdf, area.x + area.width - 15, area.y + 15, 8);
+
+    // Leyenda de escala, debajo del nombre "PLANO DE LOCALIZACIÓN" (ver
+    // drawLocationHeader) — se dibuja SIEMPRE, sin importar qué modo haya
+    // renderizado el mapa arriba.
+    const frameHeightCaption = this.getUbicacionFrameHeight(area);
+    pdf.setFontSize(6);
+    pdf.setTextColor(0);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    pdf.text(
+      `ESCALA: 1/${escalaNominalCroquis}`,
+      area.x + area.width / 2,
+      area.y + frameHeightCaption + 7.5,
+      { align: "center" },
+    );
   }
 
   /**
    * Renderizado vectorial clásico del croquis (Extraído de drawLocationPlanAutoScale)
    */
+  /**
+   * Escala nominal "1:N" del croquis, calculada a partir del bbox del lote +
+   * contexto disponible. Extraída de renderVectorLocationSketch para que se
+   * pueda calcular UNA vez, sin importar qué modo (vectorial/satelital/
+   * imagen) termine dibujando el mapa — antes solo existía dentro del modo
+   * vectorial, así que la leyenda "ESCALA: 1/N" no se dibujaba cuando el
+   * modo satelital/imagen lograba cargar su propia imagen.
+   */
+  private calculateEscalaCroquis(
+    mainVertices: [number, number][],
+    drawW: number,
+    drawH: number,
+  ): number {
+    const { UBICACION } = PLANO_THEME;
+    const CONTEXT_VISIBLE_FRACTION = 0.72;
+
+    const validCoords: [number, number][] = [...mainVertices];
+    if (this.payload.contexto && this.payload.contexto.features) {
+      this.payload.contexto.features.forEach((f) => {
+        if (f.geometry.type === "Polygon") {
+          validCoords.push(
+            ...(f.geometry.coordinates[0] as [number, number][]),
+          );
+        }
+      });
+    }
+
+    const bbox = getBoundingBox(validCoords);
+    const contentW = bbox.width || 50;
+    const contentH = bbox.height || 50;
+    const marginFactor = UBICACION.MARGIN_FACTOR;
+
+    const rawScaleNecesaria = Math.min(
+      (drawW * marginFactor) / (contentW * CONTEXT_VISIBLE_FRACTION),
+      (drawH * marginFactor) / (contentH * CONTEXT_VISIBLE_FRACTION),
+    );
+    const nominalNecesario = 1000 / Math.max(rawScaleNecesaria, 0.0001);
+
+    const ESCALAS_ESTANDAR = [100, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 7500, 10000];
+    return (
+      ESCALAS_ESTANDAR.find((s) => s >= nominalNecesario) ??
+      Math.ceil(nominalNecesario / 500) * 500
+    );
+  }
+
   private renderVectorLocationSketch(
     pdf: jsPDF,
     drawX: number,
@@ -563,19 +642,9 @@ export class PlanoPerimetricoGeneratorV2Copia {
     drawH: number,
     mainVertices: [number, number][],
     area: AreaDibujo,
+    escalaNominal: number,
   ): void {
     const { UBICACION } = PLANO_THEME;
-
-    // El auto-fit no debe encuadrar el 100% de la extensión recolectada
-    // (lote + todos los vecinos del payload): eso deja el lote como un punto
-    // diminuto perdido entre manzanas lejanas. Fingimos que el contenido a
-    // encuadrar es solo una fracción de su ancho/alto real, así el zoom
-    // queda más cerrado y el lote se ve prominente; lo que sobra del
-    // contexto recolectado queda fuera del recuadro (el clip de
-    // drawLocationPlanAutoScale ya se encarga de recortarlo limpiamente, no
-    // hace falta filtrar antes). 0.72 = zoom extendido 20% respecto al 0.6
-    // anterior (más zoom-out, se ve más contexto alrededor del lote).
-    const CONTEXT_VISIBLE_FRACTION = 0.72;
 
     // 2. Recolectar coordenadas para el BBox: TODOS los vecinos del payload,
     // sin filtro de radio propio. Antes había un MAX_RADIUS=70m hardcodeado
@@ -596,50 +665,9 @@ export class PlanoPerimetricoGeneratorV2Copia {
       });
     }
 
-    // 3. Calcular Escala y BBox
+    // 3. BBox (la escala ya viene calculada por calculateEscalaCroquis)
     const bbox = getBoundingBox(validCoords);
-    const contentW = bbox.width || 50;
-    const contentH = bbox.height || 50;
-    const marginFactor = UBICACION.MARGIN_FACTOR;
-
-    // rawScale son mm de papel por metro real (dx_mm = dx_metros * rawScale).
-    // El mínimo de los dos ejes es lo más grande que cabe sin desbordar.
-    // Se divide por CONTEXT_VISIBLE_FRACTION para encuadrar solo ese
-    // porcentaje del contenido (ver comentario junto a MAX_RADIUS).
-    const rawScaleNecesaria = Math.min(
-      (drawW * marginFactor) / (contentW * CONTEXT_VISIBLE_FRACTION),
-      (drawH * marginFactor) / (contentH * CONTEXT_VISIBLE_FRACTION),
-    );
-
-    // Denominador de escala "1:N" correspondiente: N = 1000 / (mm por metro).
-    // (La fórmula anterior usaba 25.4 en vez de 1000, mostrando un número de
-    // escala que no correspondía a lo realmente dibujado.)
-    const nominalNecesario = 1000 / Math.max(rawScaleNecesaria, 0.0001);
-
-    // Redondear SIEMPRE hacia una escala estándar más alejada (nunca más
-    // cercana): así el dibujo real nunca ocupa más espacio del necesario y
-    // jamás se desborda del recuadro, y además el número que se imprime es
-    // uno reconocible por cualquier escalímetro (750, 1000, 1500...), igual
-    // que ya hace el plano de ubicación de la página 4.
-    const ESCALAS_ESTANDAR = [100, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 7500, 10000];
-    const escalaNominal = ESCALAS_ESTANDAR.find((s) => s >= nominalNecesario)
-      ?? Math.ceil(nominalNecesario / 500) * 500;
-
     const rawScale = 1000 / escalaNominal;
-
-    // Escala fuera del recuadro (debajo del nombre "PLANO DE LOCALIZACIÓN",
-    // que también va debajo del marco — ver drawLocationHeader). Mismo
-    // formato "ESCALA: 1/N" que el título principal, para consistencia.
-    const frameHeightCaption = this.getUbicacionFrameHeight(area);
-    pdf.setFontSize(6);
-    pdf.setTextColor(0);
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-    pdf.text(
-      `ESCALA: 1/${escalaNominal}`,
-      area.x + area.width / 2,
-      area.y + frameHeightCaption + 7.5,
-      { align: "center" },
-    );
 
     // 4. Transformación
     const bboxCX = (bbox.minX + bbox.maxX) / 2;
@@ -1433,8 +1461,6 @@ export class PlanoPerimetricoGeneratorV2Copia {
   ): void {
     const { TITULO } = PLANO_THEME;
 
-    const centerX = area.x + area.width / 2;
-
     // Posicionar el título debajo del punto más bajo del polígono dibujado
     // (no un offset fijo desde el borde), para que lotes alargados o rotados
     // que se extiendan hacia abajo no queden tapados por el título.
@@ -1466,7 +1492,12 @@ export class PlanoPerimetricoGeneratorV2Copia {
     const boxWidth =
       Math.max(titleWidth, escalaWidth) + TITULO.PADDING_H * 2;
     const boxHeight = TITULO.BOX_HEIGHT + escalaRowHeight;
-    const boxX = centerX - boxWidth / 2;
+
+    // Recuadro anclado en la parte IZQUIERDA del área de dibujo (a pedido),
+    // en vez de centrado horizontalmente como antes.
+    const LEFT_MARGIN = 4; // mm desde el borde izquierdo del recuadro
+    const boxX = area.x + LEFT_MARGIN;
+    const centerX = boxX + boxWidth / 2; // centrado del texto DENTRO de la caja
     const boxY = titleY - TITULO.PADDING_V;
 
     pdf.setFillColor(255, 255, 255);
@@ -1493,22 +1524,72 @@ export class PlanoPerimetricoGeneratorV2Copia {
     }
   }
 
+  /**
+   * Rosa de los vientos vectorial de 8 puntas (N/E/S/W largas en las
+   * cardinales, más cortas en las diagonales, círculo blanco al centro) — a
+   * pedido, en reemplazo de la flecha simple anterior (2 triángulos + "N").
+   * Todo dibujado con primitivas de jsPDF, sin imagen.
+   */
   private drawNorthCatastro(pdf: jsPDF, x: number, y: number, s: number): void {
+    const R_LONG = s / 2;
+    const R_SHORT = R_LONG * 0.45;
+    const BASE_WIDTH_LONG = R_LONG * 0.28;
+    const BASE_WIDTH_SHORT = R_SHORT * 0.28;
+
+    // Cada punta es una "cometa" partida en 2 triángulos (negro/gris) desde
+    // el centro hasta la punta, dando el efecto pinwheel clásico de una
+    // rosa de los vientos. Ángulos en el espacio mm expuesto por jsPDF:
+    // 90°=N (arriba), 0°=E (derecha), misma convención (cos, -sin) que el
+    // resto del documento.
+    const drawSpike = (angleDeg: number, length: number, baseWidth: number) => {
+      const angleRad = (angleDeg * Math.PI) / 180;
+      const dirX = Math.cos(angleRad);
+      const dirY = -Math.sin(angleRad);
+      const perpX = -dirY;
+      const perpY = dirX;
+
+      const tipX = x + dirX * length;
+      const tipY = y + dirY * length;
+      const baseLeftX = x + perpX * baseWidth;
+      const baseLeftY = y + perpY * baseWidth;
+      const baseRightX = x - perpX * baseWidth;
+      const baseRightY = y - perpY * baseWidth;
+
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(PLANO_THEME.STROKES.NORTH_ARROW);
+
+      pdf.setFillColor(0, 0, 0);
+      pdf.triangle(x, y, baseLeftX, baseLeftY, tipX, tipY, "FD");
+
+      pdf.setFillColor(150, 150, 150);
+      pdf.triangle(x, y, tipX, tipY, baseRightX, baseRightY, "FD");
+    };
+
+    drawSpike(90, R_LONG, BASE_WIDTH_LONG); // N
+    drawSpike(45, R_SHORT, BASE_WIDTH_SHORT); // NE
+    drawSpike(0, R_LONG, BASE_WIDTH_LONG); // E
+    drawSpike(315, R_SHORT, BASE_WIDTH_SHORT); // SE
+    drawSpike(270, R_LONG, BASE_WIDTH_LONG); // S
+    drawSpike(225, R_SHORT, BASE_WIDTH_SHORT); // SW
+    drawSpike(180, R_LONG, BASE_WIDTH_LONG); // W
+    drawSpike(135, R_SHORT, BASE_WIDTH_SHORT); // NW
+
+    // Círculo blanco central
+    pdf.setFillColor(255, 255, 255);
     pdf.setDrawColor(0);
     pdf.setLineWidth(PLANO_THEME.STROKES.NORTH_ARROW);
+    pdf.circle(x, y, BASE_WIDTH_LONG * 0.9, "FD");
 
-    pdf.setFillColor(0, 0, 0);
-    pdf.triangle(x, y - s / 2, x - s / 6, y, x + s / 6, y, "F");
-
-    pdf.setFillColor(255, 255, 255);
-    pdf.triangle(x, y + s / 2, x - s / 6, y, x + s / 6, y, "FD");
-
-    pdf.line(x, y - s / 2, x, y + s / 2);
-
+    // Etiquetas cardinales (sin rotación, align/baseline de jsPDF son
+    // seguros aquí — el bug de align+angle solo aplica a texto rotado).
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(s);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-    pdf.text("N", x, y - s / 2 - 2, { align: "center" });
+    const labelGap = 2;
+    pdf.text("N", x, y - R_LONG - labelGap, { align: "center", baseline: "bottom" });
+    pdf.text("S", x, y + R_LONG + labelGap, { align: "center", baseline: "top" });
+    pdf.text("E", x + R_LONG + labelGap, y, { align: "left", baseline: "middle" });
+    pdf.text("W", x - R_LONG - labelGap, y, { align: "right", baseline: "middle" });
   }
 
   private calculateScaleForViewport(
@@ -1522,12 +1603,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
     const scaleY = (bbox.height * 1000) / (h - m * 2);
     // ZOOM_OUT_PADDING: antes el lote se ajustaba al 100% exacto del área
     // disponible (ajuste "a presión"), lo que lo hacía ver grande/apretado
-    // contra el marco. 1.15 deja ~15% de aire extra alrededor, así el lote
-    // sale un poco más pequeño y con más contexto visible sin tocar el
-    // recuadro. En esta copia se pidió alejar un 30% adicional, así que se
-    // multiplica: 1.15 * 1.30 ≈ 1.495 (solo afecta a esta copia, no al
-    // Plano Perimétrico oficial).
-    const ZOOM_OUT_PADDING = 1.15 * 1.3;
+    // contra el marco. 1.15 deja ~15% de aire extra alrededor. Se pidieron
+    // dos alejamientos adicionales sucesivos en esta copia: +30% y luego
+    // +90% más, así que se multiplican todos: 1.15 * 1.30 * 1.90 ≈ 2.8405
+    // (solo afecta a esta copia, no al Plano Perimétrico oficial).
+    const ZOOM_OUT_PADDING = 1.15 * 1.3 * 1.9;
     const raw = Math.max(scaleX, scaleY) * ZOOM_OUT_PADDING;
 
     const scales = [
