@@ -646,16 +646,6 @@ export class PlanoPerimetricoGeneratorV2 {
       for (let i = 1; i < pts.length; i++) pdf.lineTo(pts[i][0], pts[i][1]);
       pdf.close();
       pdf.fillStroke();
-
-      // Etiquetas de vecinos
-      if (!isCalle && feature.properties.numeroLote) {
-        const center = this.calculateVisualCenter(pts);
-        pdf.setFontSize(4);
-        pdf.setTextColor(100);
-        pdf.text(feature.properties.numeroLote, center.x, center.y, {
-          align: "center",
-        });
-      }
     });
 
     // 6. Dibujo Lote Principal (Encima de todo)
