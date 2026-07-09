@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
 import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { DatosProcesados } from '@/lib/services/PlanoDataProcessor';
-import { calculateInteriorAngles, toDMS } from '@/lib/geometry/utmUtils';
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
+import { drawCoordinatesTechnicalTable } from './CoordinatesTable';
 
 /**
  * Generador de Memoria Descriptiva - Proyecto Terra Lima
@@ -305,75 +305,19 @@ export class MemoriaDescriptivaGenerator {
   private drawCoordinatesTable(pdf: jsPDF, vertices: number[][], y: number): number {
     const pageWidth = pdf.internal.pageSize.width;
     const tableWidth = pageWidth - (this.MARGIN * 2);
-    const rowHeight = 7;
 
-    // Anchos proporcionales al contenido de cada columna (suman tableWidth).
-    // Orden solicitado: VÉRTICE, LADO, DIST., ÁNGULO INTERNO, ESTE (X), NORTE (Y).
-    const colWidths = [18, 26, 22, 30, 32, 32].map((w) => (w / 160) * tableWidth);
-
-    // Ángulos internos: misma fuente única de verdad que el Plano
-    // Perimétrico (lib/geometry/utmUtils), robusta ante el sentido de
-    // recorrido del polígono.
-    const angulosInternos = calculateInteriorAngles(vertices as [number, number][]);
-
-    // Distancias registrales por lado: misma fuente que el Plano
-    // Perimétrico (datosProcesados.linderosFinal), indexadas por vértice.
-    const linderoPorVertice = new Map(
-      this.datosProcesados.linderosFinal.map((l) => [l.index, l]),
+    // Misma tabla que el Plano Perimétrico ("CUADRO DE DATOS TÉCNICOS"):
+    // mismas columnas, mismo estilo, mismos totales y misma fuente de datos
+    // (lib/generators/CoordinatesTable.ts), para que ambos folios del
+    // expediente muestren exactamente el mismo cuadro.
+    return drawCoordinatesTechnicalTable(
+      pdf,
+      this.MARGIN,
+      y,
+      tableWidth,
+      vertices as [number, number][],
+      this.datosProcesados.linderosFinal,
     );
-
-    // Header
-    pdf.setFillColor(50, 50, 50);
-    pdf.rect(this.MARGIN, y, tableWidth, rowHeight, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(9);
-
-    const headers = ['VÉRTICE', 'LADO', 'DIST.', 'ÁNG. INTERNO', 'ESTE (X)', 'NORTE (Y)'];
-    let x = this.MARGIN;
-    headers.forEach((h, i) => {
-        pdf.text(h, x + colWidths[i] / 2, y + 5, { align: 'center' });
-        x += colWidths[i];
-    });
-
-    y += rowHeight;
-    pdf.setTextColor(0);
-
-    // Rows
-    vertices.forEach((v, i) => {
-      const next = (i + 1) % vertices.length;
-      const lindero = linderoPorVertice.get(i);
-
-      if (i % 2 === 0) {
-        pdf.setFillColor(245, 245, 245);
-        pdf.rect(this.MARGIN, y, tableWidth, rowHeight, 'F');
-      }
-
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-
-      x = this.MARGIN;
-      const values = [
-        `V-${i + 1}`,
-        lindero?.tramo ?? `V${i + 1}-V${next + 1}`,
-        lindero ? `${lindero.longitudTexto}m` : '---',
-        toDMS(angulosInternos[i]),
-        v[0].toFixed(3),
-        v[1].toFixed(3),
-      ];
-      values.forEach((val, j) => {
-        pdf.text(val, x + colWidths[j] / 2, y + 5, { align: 'center' });
-        x += colWidths[j];
-      });
-
-      y += rowHeight;
-    });
-
-    // Borde final
-    pdf.setDrawColor(200);
-    pdf.rect(this.MARGIN, y - (vertices.length * rowHeight), tableWidth, vertices.length * rowHeight);
-
-    return y;
   }
 
   private drawFooter(pdf: jsPDF, lote: any): void {

@@ -24,7 +24,6 @@ import {
   utmToLatLng,
   calculateInteriorAngles,
   DEFAULT_UTM_ZONE,
-  toDMS,
 } from "@/lib/geometry/utmUtils";
 import { MapService } from "@/lib/services/MapService";
 import { PLANO_THEME, getGridInterval } from "@/lib/config/PlanoTheme";
@@ -34,6 +33,7 @@ import type {
 } from "@/types/PlanosPayload";
 import type { DatosProcesados } from "@/lib/services/PlanoDataProcessor";
 import * as turf from "@turf/turf";
+import { drawCoordinatesTechnicalTable } from "./CoordinatesTable";
 
 // ============================================================================
 // TIPOS INTERNOS
@@ -611,14 +611,16 @@ export class PlanoPerimetricoGeneratorV2 {
 
     const rawScale = 1000 / escalaNominal;
 
+    // Escala fuera del recuadro (debajo), como pie de figura — antes iba
+    // pegada arriba a la derecha, encimada con la barra de título.
     pdf.setFontSize(6);
     pdf.setTextColor(0);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(
       `(E Aprox 1:${escalaNominal})`,
-      area.x + area.width - 2,
-      area.y + 3.5,
-      { align: "right" },
+      area.x + area.width / 2,
+      area.y + area.height + 3,
+      { align: "center" },
     );
 
     // 4. Transformación
@@ -786,141 +788,17 @@ export class PlanoPerimetricoGeneratorV2 {
     area: AreaDibujo,
     vertices: [number, number][],
   ): void {
-    const { TABLA_TECNICA } = PLANO_THEME;
-    const { x, y: startY, width: w } = area;
-    let y = startY;
-
-    // Header
-    pdf.setFillColor(0, 0, 0);
-    pdf.rect(x, y, w, TABLA_TECNICA.HEADER_HEIGHT, "F");
-    pdf.setTextColor(255);
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-    pdf.text("CUADRO DE DATOS TÉCNICOS (WGS84)", x + w / 2, y + 4, {
-      align: "center",
-    });
-    y += TABLA_TECNICA.HEADER_HEIGHT;
-
-    // Sub-header - Con columnas: VERT, LADO, DIST, ANG, ESTE, NORTE
-    const cols = ["V.", "LADO", "DIST.", "ANG.", "ESTE (X)", "NORTE (Y)"];
-    const colW = [7, 12, 17, 16, 24, 24].map((p) => (w * p) / 100);
-
-    const headerColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_HEADER);
-    pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
-    pdf.setDrawColor(0);
-    pdf.rect(x, y, w, TABLA_TECNICA.SUBHEADER_HEIGHT, "FD");
-    pdf.setTextColor(0);
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-
-    let cx = x;
-    cols.forEach((c: string, i: number) => {
-      pdf.text(c, cx + colW[i] / 2, y + 3.5, { align: "center" });
-      // Linea vertical (separador derecho)
-      pdf.line(
-        cx + colW[i],
-        y,
-        cx + colW[i],
-        y + TABLA_TECNICA.SUBHEADER_HEIGHT,
-      );
-      cx += colW[i];
-    });
-    y += TABLA_TECNICA.SUBHEADER_HEIGHT;
-
-    // Filas de datos (USANDO LINDEROS PROCESADOS)
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-
-    // Ángulos internos: única fuente de verdad (lib/geometry/utmUtils),
-    // robusta ante el sentido de recorrido del polígono.
-    const angulosInternos = calculateInteriorAngles(vertices);
-
-    let totalLength = 0;
-    let totalAngle = 0;
-
-    this.datosProcesados.linderosFinal.forEach(
-      (lindero: LinderoRegistral, i: number) => {
-        // Zebra striping
-        if (i % 2 === 0) {
-          pdf.setFillColor(255, 255, 255);
-        } else {
-          const zebraColor = this.hexToRgb(PLANO_THEME.COLORS.TABLE_ZEBRA);
-          pdf.setFillColor(zebraColor.r, zebraColor.g, zebraColor.b);
-        }
-        pdf.rect(x, y, w, TABLA_TECNICA.ROW_HEIGHT, "FD");
-
-        cx = x;
-        const cellY = y + 3;
-
-        const drawCell = (
-          txt: string,
-          width: number,
-          size: number = PLANO_THEME.FONTS.SIZES.SMALL,
-        ) => {
-          pdf.setFontSize(size);
-          pdf.text(txt, cx + width / 2, cellY, { align: "center" });
-          // Linea vertical (separador derecho)
-          pdf.line(cx + width, y, cx + width, y + TABLA_TECNICA.ROW_HEIGHT);
-          cx += width;
-        };
-
-        const vertexIdx = lindero.index;
-        const nextIdx = (vertexIdx + 1) % vertices.length;
-
-        drawCell(`V${vertexIdx + 1}`, colW[0]);
-        drawCell(lindero.tramo, colW[1]);
-        // ⭐ USAR longitudTexto REGISTRAL (no calcular)
-        const lenVal = parseFloat(lindero.longitudTexto);
-        totalLength += isNaN(lenVal) ? 0 : lenVal;
-        drawCell(lindero.longitudTexto + "m", colW[2]);
-
-        // ⭐ MOSTRAR ángulo interno (fuente única: calculateInteriorAngles)
-        const angDeg = angulosInternos[vertexIdx];
-
-        totalAngle += angDeg;
-
-        drawCell(toDMS(angDeg), colW[3]);
-        drawCell(vertices[vertexIdx][0].toFixed(2), colW[4]);
-        drawCell(vertices[vertexIdx][1].toFixed(2), colW[5]);
-
-        y += TABLA_TECNICA.ROW_HEIGHT;
-      },
+    // Tabla compartida con la Memoria Descriptiva (misma fuente de verdad
+    // visual y de datos, ver lib/generators/CoordinatesTable.ts) para que
+    // ambos folios del expediente muestren exactamente el mismo cuadro.
+    drawCoordinatesTechnicalTable(
+      pdf,
+      area.x,
+      area.y,
+      area.width,
+      vertices,
+      this.datosProcesados.linderosFinal,
     );
-
-    // DIBUJAR TOTALES
-    pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
-    pdf.rect(x, y, w, TABLA_TECNICA.ROW_HEIGHT, "FD");
-
-    // Label "TOTAL"
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-    pdf.setTextColor(0); // Texto negro para lectura? O blanco si headerColor es oscuro.
-    // Nota: Header es azul oscuro. Totals suele ser destacado. Header usa TextColor 255 (Blanco)?
-    // Line 446 setTextColor(255) for Header. Line 460 setTextColor(0) for Sub header.
-    // Usaremos Blanco (255) si es fondo oscuro. headerColor es TABLE_HEADER.
-    // Verifiquemos contraste. Asumo texto blanco similar al titulo principal.
-    // Pero SUBHEADER usa headerColor? Line 457.
-    // Line 460 setTextColor(0).
-    // Line 456 headerColor = TABLE_HEADER.
-    // Si TABLE_HEADER es claro, usa negro.
-    // Sigamos la convención del Subheader (line 460).
-    pdf.setTextColor(0);
-
-    // Centrar "TOTAL" en V. y LADO (col 0 y 1)
-    const labelW = colW[0] + colW[1];
-    pdf.text("TOTAL", x + labelW / 2, y + 3.5, { align: "center" });
-
-    // Suma Distancia
-    let cxSum = x + colW[0] + colW[1];
-    pdf.text(totalLength.toFixed(2) + "m", cxSum + colW[2] / 2, y + 3.5, {
-      align: "center",
-    });
-    cxSum += colW[2];
-
-    // Suma Angulos
-    pdf.text(toDMS(totalAngle), cxSum + colW[3] / 2, y + 3.5, {
-      align: "center",
-    });
-
-    y += TABLA_TECNICA.ROW_HEIGHT;
   }
 
   // ==========================================================================
