@@ -324,21 +324,20 @@ export class PlanoPerimetricoGeneratorV2 {
         return [centerX + dx, centerY - dy] as [number, number];
       });
 
-      // Diferenciar entre calles, áreas verdes y lotes
-      if (feature.properties.tipo === "calle") {
+      // Diferenciar entre elementos urbanos (capa dinámica definida en Odoo
+      // — elemento.urbano.capa, estilo AutoCAD: trae su propio color/
+      // mostrarEtiqueta) y lotes vecinos comunes ("lote" es el único tipo
+      // reservado, sin color propio).
+      if (feature.properties.tipo !== "lote") {
+        const colorUrbano =
+          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         cad.drawPolygon(paperPoints, {
-          strokeColor: PLANO_THEME.COLORS.SECONDARY,
+          strokeColor: colorUrbano,
           lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
-          fillColor: "#F9F9F9",
-        });
-      } else if (feature.properties.tipo === "area_verde") {
-        cad.drawPolygon(paperPoints, {
-          strokeColor: PLANO_THEME.COLORS.NEIGHBOR_STROKE,
-          lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
-          fillColor: "#D4EDD4", // verde suave, distinto del gris de lotes vecinos
+          fillColor: colorUrbano,
         });
 
-        if (feature.properties.numeroLote) {
+        if (feature.properties.mostrarEtiqueta !== false && feature.properties.numeroLote) {
           const center = this.calculateVisualCenter(paperPoints);
           pdf.setTextColor(
             parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16),
@@ -695,20 +694,15 @@ export class PlanoPerimetricoGeneratorV2 {
       );
       if (pts.length < 2) return;
 
-      const isCalle = feature.properties.tipo === "calle";
-      const isAreaVerde = feature.properties.tipo === "area_verde";
-
-      // Estilos semánticos desde THEME
-      if (isCalle) {
-        pdf.setDrawColor(200);
-        pdf.setLineWidth(0.05);
-        pdf.setFillColor(250, 250, 250);
-      } else if (isAreaVerde) {
-        pdf.setDrawColor(
-          parseInt(PLANO_THEME.COLORS.NEIGHBOR_STROKE.slice(1, 3), 16),
-        );
+      // Elemento urbano (capa dinámica de Odoo, trae su propio color) vs.
+      // lote vecino común ("lote" es el único tipo reservado).
+      if (feature.properties.tipo !== "lote") {
+        const colorUrbano =
+          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        const rgb = this.hexToRgb(colorUrbano);
+        pdf.setDrawColor(rgb.r, rgb.g, rgb.b);
         pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
-        pdf.setFillColor(212, 237, 212); // verde suave (#D4EDD4)
+        pdf.setFillColor(rgb.r, rgb.g, rgb.b);
       } else {
         pdf.setDrawColor(
           parseInt(PLANO_THEME.COLORS.NEIGHBOR_STROKE.slice(1, 3), 16),

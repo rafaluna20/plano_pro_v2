@@ -103,6 +103,10 @@ export interface GenerarPlanosRequest {
       estado: string;
       tipo?: string;
       texto?: string;
+      /** Color hex de la capa (elemento.urbano.capa en Odoo). Dinámico, no un enum fijo. */
+      color?: string;
+      /** Si el nombre del elemento se imprime como etiqueta sobre el polígono. */
+      mostrarEtiqueta?: boolean;
     }>;
   };
   imagenContexto?: {

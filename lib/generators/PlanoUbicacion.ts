@@ -202,12 +202,16 @@ export class PlanoUbicacionGenerator {
       // Usamos la nueva función centralizada para consistencia
       const pts = utmToPaperRelative(el.vertices, realCenter, escala, paperCx, paperCy);
 
-      // Estilo Vecino
-      const isAreaVerde = el.tipo === 'AREA_VERDE';
-      cad.drawPolygon(pts, { 
-        strokeColor: '#AAAAAA', 
+      // Estilo Vecino: esta ruta lee el.tipo/el.color crudos (tal como los
+      // manda mapa_renasur), no pasa por el adapter. "LOTE" es el único
+      // tipo reservado (lote vecino, sin color propio); cualquier otro
+      // elemento urbano ya trae su color de capa (Odoo) directo en el payload.
+      const esLote = el.tipo === 'LOTE';
+      const colorUrbano = esLote ? undefined : (el.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR);
+      cad.drawPolygon(pts, {
+        strokeColor: colorUrbano || '#AAAAAA',
         lineWidth: 0.2,
-        fillColor: isAreaVerde ? '#F0FFF0' : undefined 
+        fillColor: colorUrbano
       });
 
       // Texto del vecino (Número de lote)

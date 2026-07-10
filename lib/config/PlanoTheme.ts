@@ -85,6 +85,17 @@ export const PLANO_THEME = {
   },
 
   // ============================================================================
+  // 2b. ELEMENTOS URBANOS (calles, parques, agua, etc. — capas dinámicas)
+  // ============================================================================
+  // El color y si se muestra etiqueta ya NO viven acá: cada elemento trae su
+  // propio "color"/"mostrarEtiqueta" en el payload (ver
+  // ContextoElementoProperties), definidos como "capa" editable en Odoo
+  // (elemento.urbano.capa, estilo AutoCAD) — un tipo/color nuevo no requiere
+  // tocar código. Este es solo el color de respaldo si algo llega sin color
+  // (dato viejo, capa borrada, etc.).
+  ELEMENTO_URBANO_FALLBACK_COLOR: '#AAAAAA',
+
+  // ============================================================================
   // 3. GROSORES DE LÍNEA (Line Weights en mm)
   // ============================================================================
   STROKES: {

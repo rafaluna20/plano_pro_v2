@@ -153,8 +153,20 @@ export type LoteObjetivo = Feature<
  * Propiedades de un elemento de contexto
  */
 export interface ContextoElementoProperties {
-  /** Tipo de elemento */
-  tipo: "lote" | "calle" | "area_verde" | "equipamiento";
+  /**
+   * Tipo de elemento. "lote" es el único valor reservado (lote vecino común,
+   * sin color propio). Cualquier otro string es un código de capa dinámico
+   * definido en Odoo (elemento.urbano.capa) — ya no es un enum fijo: una
+   * capa nueva no requiere cambios de código acá, solo trae su propio
+   * "color"/"mostrarEtiqueta" en el payload.
+   */
+  tipo: string;
+
+  /** Color hex de la capa (ver elemento.urbano.capa en Odoo). Ausente para tipo "lote". */
+  color?: string;
+
+  /** Si se debe imprimir "nombre"/"numeroLote" como etiqueta sobre el polígono. */
+  mostrarEtiqueta?: boolean;
 
   /** Nombre o número identificador */
   nombre?: string;

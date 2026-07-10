@@ -141,15 +141,19 @@ export class PlanoRequestAdapter {
                             coords.push(coords[0]);
                         }
 
+                        // 'LOTE' es el único valor reservado (lote vecino
+                        // común, sin color propio). Cualquier otro string es
+                        // un código de capa dinámico (elemento.urbano.capa
+                        // en Odoo) que ya viene con su propio color/
+                        // mostrarEtiqueta en el payload — no hay un enum
+                        // fijo que mantener acá.
+                        const esLote = el.tipo === 'LOTE';
                         features.push({
                             type: 'Feature',
                             properties: {
-                                // Antes solo distinguía AREA_VERDE (todo lo
-                                // demás caía en 'lote', incluyendo CALLE) —
-                                // las calles reales enviadas por mapa_renasur
-                                // (elementosUrbanos) se dibujaban como si
-                                // fueran lotes vecinos comunes.
-                                tipo: el.tipo === 'AREA_VERDE' ? 'area_verde' : el.tipo === 'CALLE' ? 'calle' : 'lote',
+                                tipo: esLote ? 'lote' : (el.tipo || 'lote').toLowerCase(),
+                                color: esLote ? undefined : el.color,
+                                mostrarEtiqueta: esLote ? undefined : el.mostrarEtiqueta,
                                 nombre: el.texto,
                                 numeroLote: el.texto, // Etiqueta visible en Plano Perimétrico (renderContext)
                                 descripcionAlterna: el.texto
