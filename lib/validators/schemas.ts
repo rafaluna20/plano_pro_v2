@@ -15,7 +15,12 @@ export const zonaUTMSchema = z.union([
 // Colindancia
 export const colindanciaSchema = z.object({
   lado: z.enum(['norte', 'sur', 'este', 'oeste', 'frente', 'fondo', 'derecha', 'izquierda', 'FRENTE', 'FONDO', 'DERECHA', 'IZQUIERDA', 'NORTE', 'SUR', 'ESTE', 'OESTE']),
-  tipo: z.enum(['lote', 'calle', 'area_verde', 'area_comun']),
+  // Antes era z.enum(['lote','calle','area_verde','area_comun']) — un enum
+  // fijo que rechazaba (400) cualquier colindancia contra una capa dinámica
+  // nueva (agua, lineas, general, o cualquier código creado en Odoo vía
+  // elemento.urbano.capa). "tipo" ya no es un catálogo cerrado, así que la
+  // validación tampoco debe serlo.
+  tipo: z.string(),
   nombre: z.string(),
   propietario: z.string().optional(),
   longitud: z.number().optional(),
@@ -74,13 +79,22 @@ export const planoConfigSchema = z.object({
   logoUrl: z.string().url().optional(),
 });
 
-// Lote Vecino
+// Lote Vecino (también usado para contexto.elementos: calles/áreas verdes/
+// agua/líneas/general/capas dinámicas — no solo lotes vecinos)
 export const loteVecinoSchema = z.object({
   codigo: z.string(),
   vertices: z.array(utmCoordinateSchema),
   estado: z.string(),
   tipo: z.string().optional(),
   texto: z.string().optional(),
+  // Zod .object() por defecto STRIPEA cualquier clave no declarada acá al
+  // validar el request — faltaban estos dos campos, así que "color" y
+  // "mostrarEtiqueta" llegaban bien desde mapa_renasur pero se perdían
+  // silenciosamente en este safeParse, antes de que el adaptador/generador
+  // los viera. Eso hacía que el plano cayera al gris de respaldo aunque el
+  // payload real (confirmado por logs) sí traía el color correcto.
+  color: z.string().optional(),
+  mostrarEtiqueta: z.boolean().optional(),
 });
 
 // Contexto

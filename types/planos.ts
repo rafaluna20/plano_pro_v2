@@ -4,7 +4,8 @@ export type UTMCoordinate = [number, number];
 export interface Colindancia {
   lado: 'norte' | 'sur' | 'este' | 'oeste' | 'frente' | 'fondo' | 'derecha' | 'izquierda'
       | 'NORTE' | 'SUR' | 'ESTE' | 'OESTE' | 'FRENTE' | 'FONDO' | 'DERECHA' | 'IZQUIERDA';
-  tipo: 'lote' | 'calle' | 'area_verde' | 'area_comun';
+  /** "lote" o el código de capa dinámico del elemento urbano (ver elemento.urbano.capa en Odoo). */
+  tipo: string;
   nombre: string;
   propietario?: string | null;
   longitud?: number | null;
