@@ -7,11 +7,14 @@ import {
   loteMetadataSchema,
   planoConfigSchema,
   contextoSchema,
+  arcoMetadataSchema,
 } from './schemas';
 
 // Schema para generar planos (request de API)
 export const generarPlanosSchema = z.object({
   vertices: z.array(utmCoordinateSchema).min(3, 'Se requieren al menos 3 vértices'),
+  // Metadata de lados curvos del polígono principal (ver x_geometry_arcos en Odoo).
+  arcos: z.array(arcoMetadataSchema).optional(),
   dimensiones: dimensionesSchema,
   lote: loteMetadataSchema,
   colindancias: z.array(colindanciaSchema),

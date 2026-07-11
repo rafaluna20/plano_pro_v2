@@ -10,6 +10,18 @@ export interface Colindancia {
   propietario?: string | null;
   longitud?: number | null;
   coordinates?: UTMCoordinate[];
+  /** Presentes solo si este lindero es un arco de circunferencia (ver ArcoMetadata). */
+  radio?: number | null;
+  longitudArco?: number | null;
+  sentido?: 'horario' | 'antihorario' | null;
+}
+
+/** Metadata de un lado curvo del polígono principal (ver x_geometry_arcos en Odoo). */
+export interface ArcoMetadata {
+  indiceVertice: number;
+  radio: number;
+  longitudArco: number;
+  sentido: 'horario' | 'antihorario';
 }
 
 export interface Dimensiones {
@@ -84,6 +96,8 @@ export interface PlanoConfig {
 // Payload de la API
 export interface GenerarPlanosRequest {
   vertices: UTMCoordinate[];
+  /** Metadata de lados curvos del polígono principal (ver x_geometry_arcos en Odoo). */
+  arcos?: ArcoMetadata[];
   dimensiones: Dimensiones;
   lote: LoteMetadata;
   colindancias: Colindancia[];

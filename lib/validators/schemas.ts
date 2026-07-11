@@ -12,6 +12,17 @@ export const zonaUTMSchema = z.union([
   z.literal(UTM_ZONES.PERU_SOUTH),
 ]);
 
+// Metadata de un lado curvo (arco de circunferencia). sentido: hacia qué
+// lado se abomba el arco caminando del vértice/extremo inicial al final.
+export const sentidoArcoSchema = z.enum(['horario', 'antihorario']);
+
+export const arcoMetadataSchema = z.object({
+  indiceVertice: z.number().int().min(0),
+  radio: z.number().positive(),
+  longitudArco: z.number().positive(),
+  sentido: sentidoArcoSchema,
+});
+
 // Colindancia
 export const colindanciaSchema = z.object({
   lado: z.enum(['norte', 'sur', 'este', 'oeste', 'frente', 'fondo', 'derecha', 'izquierda', 'FRENTE', 'FONDO', 'DERECHA', 'IZQUIERDA', 'NORTE', 'SUR', 'ESTE', 'OESTE']),
@@ -25,6 +36,10 @@ export const colindanciaSchema = z.object({
   propietario: z.string().optional(),
   longitud: z.number().optional(),
   coordinates: z.array(utmCoordinateSchema).optional(),
+  // Presentes solo si este lindero es un lado curvo (ver arcoMetadataSchema).
+  radio: z.number().positive().optional().nullable(),
+  longitudArco: z.number().positive().optional().nullable(),
+  sentido: sentidoArcoSchema.optional().nullable(),
 });
 
 // Dimensiones

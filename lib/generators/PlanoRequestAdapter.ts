@@ -13,6 +13,7 @@ import {
     Geometry
 } from '@/types/PlanosPayload';
 import { DEFAULT_UTM_ZONE } from '@/lib/geometry/utmUtils';
+import { expandirVerticesConArcos } from '@/lib/geometry/arcoUtils';
 
 // Logo por defecto (Akallpa) para el membrete, si el caller no manda uno
 // propio en config.logoUrl. Subido a Vercel Blob (mismo storage que usan
@@ -44,14 +45,21 @@ export class PlanoRequestAdapter {
         const { vertices, lote } = request;
 
         // Asegurar cierre del polígono (GeoJSON requiere primer y último punto iguales)
-        const coordinates = [...vertices];
+        const verticesCerrados = [...vertices];
         if (
-            coordinates.length > 0 &&
-            (coordinates[0][0] !== coordinates[coordinates.length - 1][0] ||
-                coordinates[0][1] !== coordinates[coordinates.length - 1][1])
+            verticesCerrados.length > 0 &&
+            (verticesCerrados[0][0] !== verticesCerrados[verticesCerrados.length - 1][0] ||
+                verticesCerrados[0][1] !== verticesCerrados[verticesCerrados.length - 1][1])
         ) {
-            coordinates.push(coordinates[0]);
+            verticesCerrados.push(verticesCerrados[0]);
         }
+
+        // Si el lote tiene lados curvos (request.arcos, ver x_geometry_arcos
+        // en Odoo), se reemplazan esos lados por puntos muestreados sobre el
+        // arco real ANTES de convertir a GeoJSON — así todo el código de
+        // dibujo existente (que solo conecta puntos consecutivos con líneas
+        // rectas) dibuja la curva real sin necesitar cambios propios.
+        const coordinates = expandirVerticesConArcos(verticesCerrados, request.arcos);
 
         return {
             type: 'Feature',

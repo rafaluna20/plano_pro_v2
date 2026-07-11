@@ -104,12 +104,20 @@ export class MemoriaDescriptivaGenerator {
       const longitud = col.longitud ? col.longitud.toFixed(2) : '0.00';
       const nombre = col.nombre || '---';
 
+      // Lindero curvo (ver x_geometry_arcos en Odoo / product_lot_geometry):
+      // se redacta como arco de circunferencia (radio + longitud de arco),
+      // no como línea recta — así se describe legalmente un lindero curvo.
+      const esArco = col.radio != null && col.longitudArco != null;
+      const terminacion = esArco
+        ? `con un arco de circunferencia de radio ${col.radio!.toFixed(2)} ml y una longitud de arco de ${col.longitudArco!.toFixed(2)} ml.`
+        : `con una línea recta de ${longitud} ml.`;
+
       // Lógica de redacción según tipo
       if (col.tipo?.toLowerCase() === 'calle' || col.tipo?.toLowerCase() === 'via' || col.tipo?.toLowerCase() === 'av') {
-        descripcion = `Por el ${lado}: Colinda con ${col.tipo} "${nombre}", con una línea recta de ${longitud} ml.`;
+        descripcion = `Por el ${lado}: Colinda con ${col.tipo} "${nombre}", ${terminacion}`;
       } else {
         const propInfo = col.propietario ? `, propiedad de ${col.propietario}` : '';
-        descripcion = `Por el ${lado}: Colinda con el ${col.tipo} "${nombre}"${propInfo}, con una línea recta de ${longitud} ml.`;
+        descripcion = `Por el ${lado}: Colinda con el ${col.tipo} "${nombre}"${propInfo}, ${terminacion}`;
       }
 
       // Dibujar título del lado (Negrita)
