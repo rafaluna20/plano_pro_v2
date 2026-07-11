@@ -312,30 +312,63 @@ export class PlanoPerimetricoGeneratorV2 {
     centerY: number,
   ): void {
     const centroUtm = calculateCentroid(mainVertices);
+    const factorEscala = 1000 / escala;
+    const utmAPapel = (coord: [number, number]): [number, number] => {
+      const dx = (coord[0] - centroUtm[0]) * factorEscala;
+      const dy = (coord[1] - centroUtm[1]) * factorEscala;
+      return [centerX + dx, centerY - dy];
+    };
 
     // Renderizar features del contexto
     this.payload.contexto.features.forEach((feature) => {
+      // Elemento circular completo (glorieta, plaza redonda, reservorio):
+      // se dibuja como círculo real, no como el polígono-diamante que trae
+      // geometry.coordinates solo para fines de encuadre/bbox.
+      if (feature.properties.circulo) {
+        const [cx, cy] = utmAPapel(feature.properties.circulo.centro);
+        const radioPapel = feature.properties.circulo.radio * factorEscala;
+        const colorUrbano =
+          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        cad.drawCircle(cx, cy, radioPapel, {
+          strokeColor: colorUrbano,
+          fillColor: colorUrbano,
+          lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
+        });
+        if (feature.properties.mostrarEtiqueta !== false && feature.properties.numeroLote) {
+          pdf.setTextColor(parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16));
+          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+          pdf.text(feature.properties.numeroLote, cx, cy, { align: "center" });
+        }
+        return;
+      }
+
       if (feature.geometry.type !== "Polygon") return;
 
       const coords = feature.geometry.coordinates[0] as [number, number][];
-      const paperPoints = coords.map((coord) => {
-        const dx = (coord[0] - centroUtm[0]) * (1000 / escala);
-        const dy = (coord[1] - centroUtm[1]) * (1000 / escala);
-        return [centerX + dx, centerY - dy] as [number, number];
-      });
+      const paperPoints = coords.map(utmAPapel);
 
       // Diferenciar entre elementos urbanos (capa dinámica definida en Odoo
       // — elemento.urbano.capa, estilo AutoCAD: trae su propio color/
-      // mostrarEtiqueta) y lotes vecinos comunes ("lote" es el único tipo
-      // reservado, sin color propio).
+      // mostrarEtiqueta/esArea) y lotes vecinos comunes ("lote" es el único
+      // tipo reservado, sin color propio).
       if (feature.properties.tipo !== "lote") {
         const colorUrbano =
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
-        cad.drawPolygon(paperPoints, {
-          strokeColor: colorUrbano,
-          lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
-          fillColor: colorUrbano,
-        });
+
+        if (feature.properties.esArea === false) {
+          // Línea abierta (ej. capa "líneas"): solo trazo, sin relleno,
+          // sin cerrar el último punto con el primero.
+          cad.drawPolyline(paperPoints, {
+            strokeColor: colorUrbano,
+            lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
+          });
+        } else {
+          cad.drawPolygon(paperPoints, {
+            strokeColor: colorUrbano,
+            lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
+            fillColor: colorUrbano,
+          });
+        }
 
         if (feature.properties.mostrarEtiqueta !== false && feature.properties.numeroLote) {
           const center = this.calculateVisualCenter(paperPoints);

@@ -143,29 +143,58 @@ export class PlanoRequestAdapter {
 
             if (contexto.elementos) {
                 contexto.elementos.forEach(el => {
-                    if (el.vertices && el.vertices.length > 0) {
-                        const coords = [...el.vertices];
-                        if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
-                            coords.push(coords[0]);
-                        }
+                    // 'LOTE' es el único valor reservado (lote vecino
+                    // común, sin color propio). Cualquier otro string es
+                    // un código de capa dinámico (elemento.urbano.capa
+                    // en Odoo) que ya viene con su propio color/
+                    // mostrarEtiqueta/esArea en el payload — no hay un enum
+                    // fijo que mantener acá.
+                    const esLote = el.tipo === 'LOTE';
+                    const propsBase = {
+                        tipo: esLote ? 'lote' : (el.tipo || 'lote').toLowerCase(),
+                        color: esLote ? undefined : el.color,
+                        mostrarEtiqueta: esLote ? undefined : el.mostrarEtiqueta,
+                        esArea: esLote ? undefined : el.esArea,
+                        nombre: el.texto,
+                        numeroLote: el.texto, // Etiqueta visible en Plano Perimétrico (renderContext)
+                        descripcionAlterna: el.texto
+                    };
 
-                        // 'LOTE' es el único valor reservado (lote vecino
-                        // común, sin color propio). Cualquier otro string es
-                        // un código de capa dinámico (elemento.urbano.capa
-                        // en Odoo) que ya viene con su propio color/
-                        // mostrarEtiqueta en el payload — no hay un enum
-                        // fijo que mantener acá.
-                        const esLote = el.tipo === 'LOTE';
+                    // Elemento circular completo (glorieta, plaza redonda,
+                    // etc.): no hay polígono de vértices que dibujar. La
+                    // geometría acá es solo un "diamante" tocando el bbox
+                    // del círculo, para que cualquier cálculo de encuadre/
+                    // zoom que recorra coordinates siga funcionando — el
+                    // dibujo real (renderContext) lee properties.circulo
+                    // directo y traza el círculo verdadero, no esto.
+                    if (el.circulo) {
+                        const [cx, cy] = el.circulo.centro;
+                        const r = el.circulo.radio;
                         features.push({
                             type: 'Feature',
-                            properties: {
-                                tipo: esLote ? 'lote' : (el.tipo || 'lote').toLowerCase(),
-                                color: esLote ? undefined : el.color,
-                                mostrarEtiqueta: esLote ? undefined : el.mostrarEtiqueta,
-                                nombre: el.texto,
-                                numeroLote: el.texto, // Etiqueta visible en Plano Perimétrico (renderContext)
-                                descripcionAlterna: el.texto
-                            },
+                            properties: { ...propsBase, circulo: el.circulo },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [cx - r, cy], [cx, cy - r], [cx + r, cy], [cx, cy + r], [cx - r, cy]
+                                ]]
+                            }
+                        });
+                        return;
+                    }
+
+                    if (el.vertices && el.vertices.length > 0) {
+                        const coordsCerrados = [...el.vertices];
+                        if (coordsCerrados[0][0] !== coordsCerrados[coordsCerrados.length - 1][0] || coordsCerrados[0][1] !== coordsCerrados[coordsCerrados.length - 1][1]) {
+                            coordsCerrados.push(coordsCerrados[0]);
+                        }
+                        // Lados curvos: expandir con puntos muestreados sobre
+                        // el arco real, igual que el lote principal.
+                        const coords = expandirVerticesConArcos(coordsCerrados, el.arcos);
+
+                        features.push({
+                            type: 'Feature',
+                            properties: propsBase,
                             geometry: {
                                 type: 'Polygon',
                                 coordinates: [coords]

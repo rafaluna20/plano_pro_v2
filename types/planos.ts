@@ -122,6 +122,12 @@ export interface GenerarPlanosRequest {
       color?: string;
       /** Si el nombre del elemento se imprime como etiqueta sobre el polígono. */
       mostrarEtiqueta?: boolean;
+      /** Si la capa es área (polígono relleno) o línea (trazo abierto, sin relleno). Default true. */
+      esArea?: boolean;
+      /** Lados curvos del polígono (vertices), si el elemento tiene alguno. */
+      arcos?: ArcoMetadata[];
+      /** Presente solo si el elemento es un círculo completo (reemplaza a "vertices"). */
+      circulo?: { centro: UTMCoordinate; radio: number };
     }>;
   };
   imagenContexto?: {

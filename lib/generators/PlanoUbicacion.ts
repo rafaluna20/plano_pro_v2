@@ -196,23 +196,48 @@ export class PlanoUbicacionGenerator {
     realCenter: [number, number]
   ) {
     elementos.forEach(el => {
-      if (!el.vertices) return;
-
-      // Transformación manual para asegurar que todo gire en torno al mismo centro (Lote Principal)
-      // Usamos la nueva función centralizada para consistencia
-      const pts = utmToPaperRelative(el.vertices, realCenter, escala, paperCx, paperCy);
-
       // Estilo Vecino: esta ruta lee el.tipo/el.color crudos (tal como los
       // manda mapa_renasur), no pasa por el adapter. "LOTE" es el único
       // tipo reservado (lote vecino, sin color propio); cualquier otro
       // elemento urbano ya trae su color de capa (Odoo) directo en el payload.
       const esLote = el.tipo === 'LOTE';
       const colorUrbano = esLote ? undefined : (el.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR);
-      cad.drawPolygon(pts, {
-        strokeColor: colorUrbano || '#AAAAAA',
-        lineWidth: 0.2,
-        fillColor: colorUrbano
-      });
+
+      // Elemento circular completo: no tiene el.vertices (o viene vacío) —
+      // se dibuja aparte, antes de que el código de abajo intente tratarlo
+      // como polígono (crasheaba con un array vacío).
+      if (el.circulo) {
+        const [centro] = utmToPaperRelative([el.circulo.centro], realCenter, escala, paperCx, paperCy);
+        const radioPapel = metrosAPapel(el.circulo.radio, escala);
+        cad.drawCircle(centro[0], centro[1], radioPapel, {
+          strokeColor: colorUrbano || '#AAAAAA',
+          fillColor: colorUrbano,
+          lineWidth: 0.2,
+        });
+        if (el.texto) {
+          pdf.setFontSize(7);
+          pdf.setTextColor(100);
+          pdf.text(el.texto, centro[0], centro[1], { align: 'center', baseline: 'middle' });
+        }
+        return;
+      }
+
+      if (!el.vertices || el.vertices.length < 2) return;
+
+      // Transformación manual para asegurar que todo gire en torno al mismo centro (Lote Principal)
+      // Usamos la nueva función centralizada para consistencia
+      const pts = utmToPaperRelative(el.vertices, realCenter, escala, paperCx, paperCy);
+
+      if (el.esArea === false) {
+        // Línea abierta (ej. capa "líneas"): solo trazo, sin relleno.
+        cad.drawPolyline(pts, { strokeColor: colorUrbano || '#AAAAAA', lineWidth: 0.2 });
+      } else {
+        cad.drawPolygon(pts, {
+          strokeColor: colorUrbano || '#AAAAAA',
+          lineWidth: 0.2,
+          fillColor: colorUrbano
+        });
+      }
 
       // Texto del vecino (Número de lote)
       if (el.texto) {

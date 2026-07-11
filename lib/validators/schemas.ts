@@ -110,6 +110,14 @@ export const loteVecinoSchema = z.object({
   // payload real (confirmado por logs) sí traía el color correcto.
   color: z.string().optional(),
   mostrarEtiqueta: z.boolean().optional(),
+  // Mismo riesgo de strip que color/mostrarEtiqueta arriba: hay que declarar
+  // cada campo nuevo acá explícitamente o zod lo descarta en silencio.
+  esArea: z.boolean().optional(),
+  arcos: z.array(arcoMetadataSchema).optional(),
+  circulo: z.object({
+    centro: utmCoordinateSchema,
+    radio: z.number().positive(),
+  }).optional(),
 });
 
 // Contexto

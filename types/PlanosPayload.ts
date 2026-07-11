@@ -168,6 +168,12 @@ export interface ContextoElementoProperties {
   /** Si se debe imprimir "nombre"/"numeroLote" como etiqueta sobre el polígono. */
   mostrarEtiqueta?: boolean;
 
+  /** Si la capa es área (polígono relleno) o línea (trazo abierto, sin relleno). Default true. */
+  esArea?: boolean;
+
+  /** Presente solo si el elemento es un círculo completo (centro+radio en UTM), en vez de un polígono. */
+  circulo?: { centro: [number, number]; radio: number };
+
   /** Nombre o número identificador */
   nombre?: string;
   numeroLote?: string;

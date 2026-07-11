@@ -83,6 +83,46 @@ export class CADDrawing {
   }
 
   /**
+   * Dibuja una polilínea ABIERTA: solo trazo, sin relleno, sin cerrar el
+   * último punto con el primero. Para elementos urbanos tipo "línea" (eje
+   * de vía, línea de referencia) que no representan un área.
+   */
+  drawPolyline(
+    points: Array<[number, number]>,
+    options?: {
+      lineWidth?: number;
+      strokeColor?: string;
+      dashed?: boolean;
+    }
+  ): void {
+    if (points.length < 2) return;
+
+    const { lineWidth = 0.2, strokeColor = '#000000', dashed = false } = options || {};
+
+    this.pdf.setLineWidth(lineWidth);
+    this.pdf.setDrawColor(strokeColor);
+
+    if (dashed && typeof (this.pdf as any).setLineDash === 'function') {
+      (this.pdf as any).setLineDash([2, 2], 0);
+    }
+
+    this.pdf.lines(
+      points.slice(1).map(([x, y], i) => {
+        const prev = points[i];
+        return [x - prev[0], y - prev[1]];
+      }),
+      points[0][0],
+      points[0][1],
+      undefined,
+      'S' // Solo trazo, nunca relleno
+    );
+
+    if (dashed && typeof (this.pdf as any).setLineDash === 'function') {
+      (this.pdf as any).setLineDash([], 0);
+    }
+  }
+
+  /**
    * Dibuja un polígono completamente cerrado
    */
   drawPolygon(
