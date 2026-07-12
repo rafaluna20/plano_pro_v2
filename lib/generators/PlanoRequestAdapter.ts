@@ -94,7 +94,12 @@ export class PlanoRequestAdapter {
                 titularidad: request.propietario ? {
                     nombre: request.propietario.nombre,
                     documento: request.propietario.dni ? { tipo: 'DNI', numero: request.propietario.dni } : undefined
-                } : undefined
+                } : undefined,
+                // Vértices reales (sin expandir) + arcos: necesarios para que
+                // ángulos internos, cotas y el cuadro técnico se calculen por
+                // lado REAL, no por cada punto muestreado de una curva.
+                verticesOriginales: verticesCerrados,
+                arcos: request.arcos
             }
         };
     }

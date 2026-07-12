@@ -82,6 +82,27 @@ export class PlanoPerimetricoGeneratorV2 {
     return this.payload.loteObjetivo.properties.ubicacion?.zonaUTM ?? DEFAULT_UTM_ZONE;
   }
 
+  /**
+   * Vértices REALES del lote (un punto por esquina), sin los puntos
+   * intermedios que PlanoRequestAdapter muestrea sobre cada lado curvo para
+   * que el borde se dibuje como curva real (ver expandirVerticesConArcos).
+   * Usar la geometría expandida acá numeraría cada punto de la curva como
+   * si fuera su propio vértice — correcto solo para el TRAZO del polígono,
+   * nunca para vértices/cotas/cuadro técnico (deben coincidir 1 a 1 con
+   * datosProcesados.linderosFinal, que ya está indexado por lado real).
+   * Cae al arreglo expandido (fallback) si el payload no trae los
+   * originales — no debería pasar tras este cambio, pero evita un crash.
+   */
+  private getVerticesOriginalesUTM(fallback: [number, number][]): [number, number][] {
+    const raw = (this.payload.loteObjetivo.properties as any).verticesOriginales as
+      | [number, number][]
+      | undefined;
+    if (!raw || raw.length < 3) return fallback;
+    const cerrado =
+      raw[0][0] === raw[raw.length - 1][0] && raw[0][1] === raw[raw.length - 1][1];
+    return cerrado ? raw.slice(0, -1) : raw;
+  }
+
   constructor(payload: PlanoPayloadHibrido, datosProcesados: DatosProcesados) {
     this.payload = payload;
     this.datosProcesados = datosProcesados;
@@ -131,6 +152,21 @@ export class PlanoPerimetricoGeneratorV2 {
     // un lote irregular esos dos puntos no coinciden, así que el polígono
     // quedaba visualmente desfasado respecto a la grilla y al contexto.
     const centroUtm = calculateCentroid(utmVertices);
+
+    // Vértices REALES (sin expandir con puntos de arco): geometry.coordinates
+    // ya trae la curva muestreada (correcta para dibujar el borde), pero
+    // numerar vértices/cotas/cuadro técnico con esos puntos intermedios
+    // etiquetaría cada uno como si fuera una esquina real. Estos son los
+    // vértices verdaderos, en el mismo sistema de referencia (centroUtm/
+    // escala/center) que el resto del dibujo.
+    const utmVerticesOriginales = this.getVerticesOriginalesUTM(utmVertices);
+    const paperPointsOriginales = utmToPaperRelative(
+      utmVerticesOriginales,
+      centroUtm,
+      escalaMain.escala,
+      centerX,
+      centerY,
+    );
 
     // ========== 5-6. CONTEXTO + TÉCNICO (recortados al área de dibujo) ==========
     // El contexto de vecinos (renderContext) no tiene límites propios y se
@@ -191,7 +227,7 @@ export class PlanoPerimetricoGeneratorV2 {
     this.drawPolygonCentralData(pdf, paperPoints);
 
     // E. Datos Topográficos (Cotas con texto REGISTRAL, Vértices, Ángulos)
-    this.drawVerticesAndDimensions(pdf, paperPoints, cad);
+    this.drawVerticesAndDimensions(pdf, paperPointsOriginales, cad);
 
     // F. Título y Norte
     this.drawTitle(pdf, layout.drawingArea, "PLANO PERIMÉTRICO", paperPoints);
@@ -231,7 +267,7 @@ export class PlanoPerimetricoGeneratorV2 {
     );
 
     // 3. Cuadro Técnico (CON DATOS PROCESADOS)
-    this.drawTechnicalTableHybrid(pdf, layout.technicalTableArea, utmVertices);
+    this.drawTechnicalTableHybrid(pdf, layout.technicalTableArea, utmVerticesOriginales);
 
     // 4. Membrete Profesional
     await this.drawProfessionalMembrete(
@@ -1097,7 +1133,11 @@ export class PlanoPerimetricoGeneratorV2 {
         const mx = midX + fperpX * INWARD_LABEL_OFFSET;
         const my = midY + fperpY * INWARD_LABEL_OFFSET;
 
-        const textStr = `${lindero.longitudTexto}m`;
+        // Lado curvo: se rotula como arco (radio + longitud de arco), no
+        // como si fuera la distancia recta entre sus 2 extremos.
+        const textStr = lindero.esArco
+          ? `Arco R=${lindero.radioArco?.toFixed(2)}m L=${lindero.longitudTexto}m`
+          : `${lindero.longitudTexto}m`;
         pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
         const textWidth = pdf.getTextWidth(textStr);

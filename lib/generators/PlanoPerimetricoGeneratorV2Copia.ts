@@ -87,6 +87,21 @@ export class PlanoPerimetricoGeneratorV2Copia {
     return this.payload.loteObjetivo.properties.ubicacion?.zonaUTM ?? DEFAULT_UTM_ZONE;
   }
 
+  /**
+   * Vértices REALES del lote (un punto por esquina), sin los puntos
+   * intermedios que PlanoRequestAdapter muestrea sobre cada lado curvo (ver
+   * misma nota en PlanoPerimetricoGeneratorV2.ts).
+   */
+  private getVerticesOriginalesUTM(fallback: [number, number][]): [number, number][] {
+    const raw = (this.payload.loteObjetivo.properties as any).verticesOriginales as
+      | [number, number][]
+      | undefined;
+    if (!raw || raw.length < 3) return fallback;
+    const cerrado =
+      raw[0][0] === raw[raw.length - 1][0] && raw[0][1] === raw[raw.length - 1][1];
+    return cerrado ? raw.slice(0, -1) : raw;
+  }
+
   constructor(payload: PlanoPayloadHibrido, datosProcesados: DatosProcesados) {
     this.payload = payload;
     this.datosProcesados = datosProcesados;
@@ -136,6 +151,17 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // un lote irregular esos dos puntos no coinciden, así que el polígono
     // quedaba visualmente desfasado respecto a la grilla y al contexto.
     const centroUtm = calculateCentroid(utmVertices);
+
+    // Vértices REALES (un punto por esquina), en el mismo sistema de
+    // referencia que el resto del dibujo — ver getVerticesOriginalesUTM.
+    const utmVerticesOriginales = this.getVerticesOriginalesUTM(utmVertices);
+    const paperPointsOriginales = utmToPaperRelative(
+      utmVerticesOriginales,
+      centroUtm,
+      escalaMain.escala,
+      centerX,
+      centerY,
+    );
 
     // ========== 5-6. CONTEXTO + TÉCNICO (recortados al área de dibujo) ==========
     // El contexto de vecinos (renderContext) no tiene límites propios y se
@@ -196,7 +222,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // ahora se dibuja debajo del "CUADRO DE DATOS TÉCNICOS")
 
     // E. Datos Topográficos (Cotas con texto REGISTRAL, Vértices, Ángulos)
-    this.drawVerticesAndDimensions(pdf, paperPoints, cad);
+    this.drawVerticesAndDimensions(pdf, paperPointsOriginales, cad);
 
     // F. Título y Norte
     this.drawTitle(
@@ -245,7 +271,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     const finalYTablaTecnica = this.drawTechnicalTableHybrid(
       pdf,
       layout.technicalTableArea,
-      utmVertices,
+      utmVerticesOriginales,
     );
 
     // 3b. Área / Perímetro, debajo del cuadro técnico (antes centrado
@@ -1264,7 +1290,9 @@ export class PlanoPerimetricoGeneratorV2Copia {
         const mx = midX + fperpX * INWARD_LABEL_OFFSET;
         const my = midY + fperpY * INWARD_LABEL_OFFSET;
 
-        const textStr = `${lindero.longitudTexto}m`;
+        const textStr = lindero.esArco
+          ? `Arco R=${lindero.radioArco?.toFixed(2)}m L=${lindero.longitudTexto}m`
+          : `${lindero.longitudTexto}m`;
         pdf.setFontSize(SIDE_LABEL_FONT);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
         const textWidth = pdf.getTextWidth(textStr);

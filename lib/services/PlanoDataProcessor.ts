@@ -85,6 +85,10 @@ interface SegmentoCalculado {
   anguloInterno: number; // ángulo interno en el vértice (en grados)
   colindancia: string;
   orientacion: string;
+  /** Si este lado es un arco de circunferencia (ver x_geometry_arcos en Odoo). */
+  esArco?: boolean;
+  /** Radio del arco (solo si esArco). */
+  radioArco?: number;
 }
 
 // ============================================================================
@@ -211,32 +215,57 @@ export class PlanoDataProcessor {
     perimetro: number;
     segmentos: SegmentoCalculado[];
   } {
+    // Área y perímetro SÍ deben usar la geometría expandida (con los puntos
+    // muestreados de cada arco): es la que da el área/perímetro real de la
+    // curva, no de la cuerda recta entre sus 2 extremos.
     const polygon = turf.polygon(this.payload.loteObjetivo.geometry.coordinates);
-
-    // Área en m²
     const area = turf.area(polygon);
-
-    // Perímetro en m (convertir de km a m)
     const perimetro = turf.length(polygon, { units: 'meters' });
 
-    // Calcular segmentos
-    const coordinates = this.payload.loteObjetivo.geometry.coordinates[0];
-    // GeoJSON exige que el anillo se cierre (primer punto === último); lo
-    // quitamos para tener un vértice por lado, sin duplicados.
-    const verticesUnicos = coordinates.slice(0, -1) as [number, number][];
-    // Ángulos internos: calculados una sola vez, de forma robusta ante el
-    // sentido de recorrido del polígono (ver calculateInteriorAngles).
+    // Segmentos/linderos, en cambio, deben ser UNO POR LADO REAL: si se
+    // usara la geometría expandida acá, un solo lado curvo (ej. arco de
+    // 35.29 ml) se fragmentaría en ~16 micro-segmentos rectos de ~2 ml cada
+    // uno (uno por punto muestreado), rompiendo el cuadro técnico y las
+    // cotas del plano (cada micro-segmento aparecería como su propio
+    // "lindero", con su propio ángulo interno casi-180° sin sentido).
+    // verticesOriginales (ver PlanoRequestAdapter) trae el polígono SIN
+    // expandir — un vértice real por esquina — para este cálculo.
+    const coordinatesOriginales = (this.payload.loteObjetivo.properties as any)?.verticesOriginales as
+      | [number, number][]
+      | undefined;
+    // verticesOriginales viene CERRADO (primer punto === último, igual que
+    // geometry.coordinates) — hay que quitar ese duplicado para tener un
+    // vértice por lado, igual que ya se hacía con la geometría expandida.
+    const verticesUnicos: [number, number][] = coordinatesOriginales && coordinatesOriginales.length >= 4
+      ? coordinatesOriginales.slice(0, -1)
+      : (this.payload.loteObjetivo.geometry.coordinates[0].slice(0, -1) as [number, number][]);
+
+    const arcos = ((this.payload.loteObjetivo.properties as any)?.arcos ?? []) as Array<{
+      indiceVertice: number;
+      radio: number;
+      longitudArco: number;
+      sentido: 'horario' | 'antihorario';
+    }>;
+    const arcoPorIndice = new Map(arcos.map((a) => [a.indiceVertice, a]));
+
+    // Ángulos internos: calculados sobre los vértices REALES, de forma
+    // robusta ante el sentido de recorrido del polígono (ver
+    // calculateInteriorAngles). Usar los puntos muestreados de un arco acá
+    // daría un ángulo ~180° sin sentido en esa esquina (son casi
+    // colineales entre sí).
     const angulosInternos = calculateInteriorAngles(verticesUnicos);
     const segmentos: SegmentoCalculado[] = [];
 
-    for (let i = 0; i < coordinates.length - 1; i++) {
-      const inicio = coordinates[i];
-      const fin = coordinates[i + 1];
+    for (let i = 0; i < verticesUnicos.length; i++) {
+      const inicio = verticesUnicos[i];
+      const fin = verticesUnicos[(i + 1) % verticesUnicos.length];
+      const arco = arcoPorIndice.get(i);
 
       // IMPORTANTE: Coordenadas UTM son planas en metros, usar distancia euclidiana
       const dx = fin[0] - inicio[0];
       const dy = fin[1] - inicio[1];
-      const distancia = Math.sqrt(dx * dx + dy * dy);
+      const distanciaRecta = Math.sqrt(dx * dx + dy * dy);
+      const distancia = arco ? arco.longitudArco : distanciaRecta;
 
       // Calcular azimut (bearing) manualmente para coordenadas planas
       // Azimut = atan2(ΔE, ΔN) convertido a grados desde el norte
@@ -250,8 +279,9 @@ export class PlanoDataProcessor {
         azimut,
         anguloInterno: angulosInternos[i],
         colindancia: '', // Se calculará después
-        orientacion: '' // Se calculará después
-      });
+        orientacion: '', // Se calculará después
+        ...(arco ? { esArco: true, radioArco: arco.radio } : {}),
+      } as SegmentoCalculado);
     }
 
     return { area, perimetro, segmentos };
@@ -327,7 +357,8 @@ export class PlanoDataProcessor {
         longitudTexto: segmento.distancia.toFixed(2),
         anguloInterno: segmento.anguloInterno,
         colindanciaTexto: colindancia,
-        orientacion: orientacion as any
+        orientacion: orientacion as any,
+        ...(segmento.esArco ? { esArco: true, radioArco: segmento.radioArco } : {}),
       });
     }
 
@@ -367,7 +398,8 @@ export class PlanoDataProcessor {
         longitudTexto: esValorValido(registral?.longitudTexto) ? registral.longitudTexto : calculado.longitudTexto,
         anguloInterno: esValorValido(registral?.anguloInterno) ? registral.anguloInterno : calculado.anguloInterno,
         colindanciaTexto: esValorValido(registral?.colindanciaTexto) ? registral.colindanciaTexto : calculado.colindanciaTexto,
-        orientacion: (registral?.orientacion as any) || calculado.orientacion
+        orientacion: (registral?.orientacion as any) || calculado.orientacion,
+        ...(calculado.esArco ? { esArco: true, radioArco: calculado.radioArco } : {}),
       });
     }
 

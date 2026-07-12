@@ -56,6 +56,12 @@ export interface LinderoRegistral {
 
   /** Orientación cardinal o relativa */
   orientacion: "FRENTE" | "DERECHA" | "FONDO" | "IZQUIERDA" | "ESQUINA";
+
+  /** Si este lado es un arco de circunferencia (ver x_geometry_arcos en Odoo), no una línea recta. */
+  esArco?: boolean;
+
+  /** Radio del arco (solo si esArco). */
+  radioArco?: number;
 }
 
 /**
@@ -135,6 +141,19 @@ export interface LoteObjetivoProperties {
   comercial?: InformacionComercial;
   ubicacion?: UbicacionAdministrativa;
   titularidad?: Titularidad;
+
+  /**
+   * Vértices ORIGINALES del polígono (cerrado, sin muestreo de arcos) — la
+   * geometría en `geometry.coordinates` ya viene expandida con puntos
+   * intermedios en cada lado curvo (ver expandirVerticesConArcos) para que
+   * el DIBUJO de la curva salga correcto, pero eso rompe cualquier cálculo
+   * que necesite UN vértice/lado por esquina real (ángulos internos,
+   * cuadro técnico, cotas). Estos son esos vértices reales.
+   */
+  verticesOriginales?: [number, number][];
+
+  /** Metadata de lados curvos del polígono principal (ver x_geometry_arcos en Odoo). */
+  arcos?: import("./planos").ArcoMetadata[];
 }
 
 /**
