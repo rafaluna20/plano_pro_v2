@@ -9,6 +9,11 @@ export interface PlanoJobData {
 export interface GenerarPlanoJob {
   planoId: string;
   vertices: UTMCoordinate[];
+  // Metadata de lados curvos del polígono principal (ver x_geometry_arcos
+  // en Odoo) — sin esto, el worker dibuja el lote como si no tuviera
+  // ningún lado curvo, aunque el resto del payload (contexto, con los
+  // arcos de elementos urbanos anidados) sí llegue completo.
+  arcos?: GenerarPlanosRequest['arcos'];
   dimensiones: Dimensiones;
   lote: LoteMetadata;
   colindancias: Colindancia[];

@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
     const job = await queuePlanoGeneration({
       planoId: plano.id,
       vertices: payload.vertices,
+      arcos: payload.arcos,
       dimensiones: payload.dimensiones,
       lote: payload.lote,
       colindancias: payload.colindancias,
