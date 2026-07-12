@@ -1793,17 +1793,41 @@ export class PlanoPerimetricoGeneratorV2Copia {
     return { escala: final, escalaTexto: `1 / ${final} ` };
   }
 
+  /**
+   * Centroide REAL del polígono (ponderado por área) — ver misma nota en
+   * PlanoPerimetricoGeneratorV2.ts. Un promedio ingenuo de vértices arrastra
+   * el centro hacia un lado curvo (muestreado con ~16 puntos extra).
+   */
   private calculateVisualCenter(pts: [number, number][]): {
     x: number;
     y: number;
   } {
-    let sx = 0,
-      sy = 0;
-    pts.forEach((p) => {
-      sx += p[0];
-      sy += p[1];
-    });
-    return { x: sx / pts.length, y: sy / pts.length };
+    let areaAcc = 0;
+    let cx = 0;
+    let cy = 0;
+    const n = pts.length;
+
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % n];
+      const cross = x0 * y1 - x1 * y0;
+      areaAcc += cross;
+      cx += (x0 + x1) * cross;
+      cy += (y0 + y1) * cross;
+    }
+
+    const area = areaAcc / 2;
+    if (Math.abs(area) < 1e-9) {
+      let sx = 0,
+        sy = 0;
+      pts.forEach((p) => {
+        sx += p[0];
+        sy += p[1];
+      });
+      return { x: sx / n, y: sy / n };
+    }
+
+    return { x: cx / (6 * area), y: cy / (6 * area) };
   }
 
   private getBoundingBoxFromCoords(coords: [number, number][]): {

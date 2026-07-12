@@ -16,6 +16,7 @@
  */
 
 import { jsPDF } from "jspdf";
+import polylabel from "polylabel";
 import { CADDrawing } from "@/lib/geometry/cadDrawing";
 import { utmToPaperRelative, metrosAPapel } from "@/lib/geometry/scaleUtils";
 import {
@@ -1651,53 +1652,72 @@ export class PlanoPerimetricoGeneratorV2 {
     return { escala: final, escalaTexto: `1 / ${final} ` };
   }
 
+  /**
+   * Punto óptimo para la etiqueta central del lote: el "pole of
+   * inaccessibility" real (el punto interior más alejado de cualquier
+   * borde), vía la librería polylabel (Mapbox) — mismo algoritmo que usan
+   * para etiquetar países/estados en mapas. A diferencia de un centroide
+   * (que puede caer FUERA del polígono en formas cóncavas, ej. un lote en
+   * "L" o "U") o de un centro de bounding box (mismo problema), esto
+   * garantiza matemáticamente un punto dentro del polígono para cualquier
+   * forma simple, sin importar qué tan irregular sea.
+   */
   private calculatePoleOfInaccessibility(pts: [number, number][]): {
     x: number;
     y: number;
   } {
-    // 1. Intentar con el Centroide geométrico (promedio de vértices)
-    const centroid = this.calculateVisualCenter(pts);
-
-    // 2. Verificar si el centroide está dentro del polígono
     try {
-      // Cerrar polígono para turf (requiere primer punto = último punto)
-      const poly = turf.polygon([[...pts, pts[0]]]);
-      const pt = turf.point([centroid.x, centroid.y]);
-
-      // Si el centroide está dentro, es el mejor punto para la etiqueta
-      if (turf.booleanPointInPolygon(pt, poly)) {
-        return centroid;
-      }
+      const ring: [number, number][] = [...pts, pts[0]];
+      const [x, y] = polylabel([ring]);
+      return { x, y };
     } catch (error) {
-      console.warn("Error verificando punto en polígono:", error);
+      console.warn("Error calculando pole of inaccessibility:", error);
+      return this.calculateVisualCenter(pts);
     }
-
-    // 3. Fallback: Si el centroide está fuera (ej. lote en U), usar centro del bounding box
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    pts.forEach((p) => {
-      if (p[0] < minX) minX = p[0];
-      if (p[0] > maxX) maxX = p[0];
-      if (p[1] < minY) minY = p[1];
-      if (p[1] > maxY) maxY = p[1];
-    });
-
-    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
   }
 
+  /**
+   * Centroide REAL del polígono (ponderado por área, fórmula estándar del
+   * "shoelace"), no un simple promedio de vértices. Con un lado curvo
+   * expandido en ~16 puntos muestreados (ver expandirVerticesConArcos), un
+   * promedio ingenuo de vértices arrastra el centro hacia ese lado —
+   * esos 16 puntos pesan lo mismo que las 3-4 esquinas reales, aunque
+   * geométricamente representen un solo lado. Esta fórmula integra sobre el
+   * área real, así que el resultado no depende de cuántos puntos muestreen
+   * cada lado.
+   */
   private calculateVisualCenter(pts: [number, number][]): {
     x: number;
     y: number;
   } {
-    let sx = 0,
-      sy = 0;
-    pts.forEach((p) => {
-      sx += p[0];
-      sy += p[1];
-    });
-    return { x: sx / pts.length, y: sy / pts.length };
+    let areaAcc = 0;
+    let cx = 0;
+    let cy = 0;
+    const n = pts.length;
+
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % n];
+      const cross = x0 * y1 - x1 * y0;
+      areaAcc += cross;
+      cx += (x0 + x1) * cross;
+      cy += (y0 + y1) * cross;
+    }
+
+    const area = areaAcc / 2;
+    if (Math.abs(area) < 1e-9) {
+      // Polígono degenerado (área ~0, ej. puntos colineales): cae al
+      // promedio simple de vértices en vez de dividir por ~0.
+      let sx = 0,
+        sy = 0;
+      pts.forEach((p) => {
+        sx += p[0];
+        sy += p[1];
+      });
+      return { x: sx / n, y: sy / n };
+    }
+
+    return { x: cx / (6 * area), y: cy / (6 * area) };
   }
 
   private getBoundingBoxFromCoords(coords: [number, number][]): {
