@@ -33,6 +33,8 @@ import type {
   LinderoRegistral,
 } from "@/types/PlanosPayload";
 import type { DatosProcesados } from "@/lib/services/PlanoDataProcessor";
+import type { ArcoMetadata } from "@/types/planos";
+import { muestrearArco } from "@/lib/geometry/arcoUtils";
 import * as turf from "@turf/turf";
 import { drawCoordinatesTechnicalTable } from "./CoordinatesTable";
 
@@ -169,6 +171,43 @@ export class PlanoPerimetricoGeneratorV2 {
       centerY,
     );
 
+    // Posición/orientación real de la etiqueta "L=X.XXm" de cada lado
+    // curvo: se muestrea el arco en UTM (misma matemática/semántica de
+    // "sentido" que usa el borde ya dibujado, ver expandirVerticesConArcos)
+    // y se toma el punto medio + tangente ahí, transformados a papel con la
+    // MISMA transformación (centroUtm/escala/center) que el resto del
+    // dibujo — así la etiqueta sigue la curva real en vez de la cuerda
+    // recta que el arco reemplazó.
+    const arcosMeta = ((this.payload.loteObjetivo.properties as any).arcos ?? []) as ArcoMetadata[];
+    const arcoLabelInfoPorIndice = new Map<number, { mid: [number, number]; angleDeg: number }>();
+    arcosMeta.forEach((arco) => {
+      const p1 = utmVerticesOriginales[arco.indiceVertice];
+      const p2 = utmVerticesOriginales[(arco.indiceVertice + 1) % utmVerticesOriginales.length];
+      if (!p1 || !p2) return;
+
+      const N = 32;
+      const muestras = muestrearArco(p1, p2, arco, N);
+      const midIdx = Math.floor(N / 2);
+      const a = muestras[Math.max(0, midIdx - 2)];
+      const mid = muestras[midIdx];
+      const b = muestras[Math.min(N, midIdx + 2)];
+
+      const [midPaper, aPaper, bPaper] = utmToPaperRelative(
+        [mid, a, b],
+        centroUtm,
+        escalaMain.escala,
+        centerX,
+        centerY,
+      );
+
+      let angleDeg =
+        Math.atan2(-(bPaper[1] - aPaper[1]), bPaper[0] - aPaper[0]) * (180 / Math.PI);
+      if (angleDeg > 90) angleDeg -= 180;
+      else if (angleDeg < -90) angleDeg += 180;
+
+      arcoLabelInfoPorIndice.set(arco.indiceVertice, { mid: midPaper, angleDeg });
+    });
+
     // ========== 5-6. CONTEXTO + TÉCNICO (recortados al área de dibujo) ==========
     // El contexto de vecinos (renderContext) no tiene límites propios y se
     // dibuja a la misma escala fina del lote, así que fácilmente se sale del
@@ -228,7 +267,7 @@ export class PlanoPerimetricoGeneratorV2 {
     this.drawPolygonCentralData(pdf, paperPoints);
 
     // E. Datos Topográficos (Cotas con texto REGISTRAL, Vértices, Ángulos)
-    this.drawVerticesAndDimensions(pdf, paperPointsOriginales, cad);
+    this.drawVerticesAndDimensions(pdf, paperPointsOriginales, cad, arcoLabelInfoPorIndice);
 
     // F. Título y Norte
     this.drawTitle(pdf, layout.drawingArea, "PLANO PERIMÉTRICO", paperPoints);
@@ -1018,6 +1057,7 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf: jsPDF,
     paperPoints: [number, number][],
     cad: CADDrawing,
+    arcoLabelInfoPorIndice?: Map<number, { mid: [number, number]; angleDeg: number }>,
   ): void {
     // Ángulos internos: única fuente de verdad (lib/geometry/utmUtils),
     // robusta ante el sentido de recorrido del polígono. Funciona igual en
@@ -1096,11 +1136,18 @@ export class PlanoPerimetricoGeneratorV2 {
       (lindero: LinderoRegistral, i: number) => {
         const p = paperPoints[i];
         const next = paperPoints[(i + 1) % paperPoints.length];
-        const midX = (p[0] + next[0]) / 2;
-        const midY = (p[1] + next[1]) / 2;
 
-        const dx = next[0] - p[0];
-        const dy = next[1] - p[1];
+        // Lado curvo: la posición/orientación de la etiqueta se calcula
+        // sobre el punto medio REAL del arco (y su tangente ahí), no sobre
+        // la cuerda recta entre sus 2 extremos — si no, "L=X.XXm" queda
+        // flotando en la dirección de la línea que el arco reemplazó, en
+        // vez de seguir la curva dibujada.
+        const arcoInfo = lindero.esArco ? arcoLabelInfoPorIndice?.get(lindero.index) : undefined;
+        const midX = arcoInfo ? arcoInfo.mid[0] : (p[0] + next[0]) / 2;
+        const midY = arcoInfo ? arcoInfo.mid[1] : (p[1] + next[1]) / 2;
+
+        const dx = arcoInfo ? undefined : next[0] - p[0];
+        const dy = arcoInfo ? undefined : next[1] - p[1];
 
         // Ángulo para pdf.text({angle}): en el espacio mm expuesto por jsPDF
         // (Y hacia abajo), el vector de avance del texto para un ángulo dado
@@ -1109,7 +1156,9 @@ export class PlanoPerimetricoGeneratorV2 {
         // Se normaliza a [-90°, 90°] para que el texto nunca quede al revés,
         // conservando el paralelismo con la línea (da igual la dirección de
         // recorrido del lado).
-        let angleDeg = Math.atan2(-dy, dx) * (180 / Math.PI);
+        let angleDeg = arcoInfo
+          ? arcoInfo.angleDeg
+          : Math.atan2(-dy!, dx!) * (180 / Math.PI);
         if (angleDeg > 90) angleDeg -= 180;
         else if (angleDeg < -90) angleDeg += 180;
         const angleRad = (angleDeg * Math.PI) / 180;
