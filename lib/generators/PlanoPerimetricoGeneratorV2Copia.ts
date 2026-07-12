@@ -1291,7 +1291,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
         const my = midY + fperpY * INWARD_LABEL_OFFSET;
 
         const textStr = lindero.esArco
-          ? `Arco R=${lindero.radioArco?.toFixed(2)}m L=${lindero.longitudTexto}m`
+          ? `L=${lindero.longitudTexto}m`
           : `${lindero.longitudTexto}m`;
         pdf.setFontSize(SIDE_LABEL_FONT);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);

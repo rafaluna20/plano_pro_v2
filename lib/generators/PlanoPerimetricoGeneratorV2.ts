@@ -1134,10 +1134,11 @@ export class PlanoPerimetricoGeneratorV2 {
         const mx = midX + fperpX * INWARD_LABEL_OFFSET;
         const my = midY + fperpY * INWARD_LABEL_OFFSET;
 
-        // Lado curvo: se rotula como arco (radio + longitud de arco), no
-        // como si fuera la distancia recta entre sus 2 extremos.
+        // Lado curvo: se rotula solo con la longitud de arco (L=...), no
+        // como si fuera la distancia recta entre sus 2 extremos. El radio
+        // ya no se imprime acá (ver Cuadro de Datos Técnicos si se necesita).
         const textStr = lindero.esArco
-          ? `Arco R=${lindero.radioArco?.toFixed(2)}m L=${lindero.longitudTexto}m`
+          ? `L=${lindero.longitudTexto}m`
           : `${lindero.longitudTexto}m`;
         pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
         pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
