@@ -411,6 +411,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
     // Renderizar features del contexto
     this.payload.contexto.features.forEach((feature) => {
+      // Las calles son contexto de referencia (para colindancias en la
+      // Memoria Descriptiva) pero no se dibujan en el plano — ni relleno ni
+      // borde. Aplica a cualquier forma (círculo o polígono/línea).
+      if (feature.properties.tipo === "calle") return;
+
       // Elemento circular completo (glorieta, plaza redonda, reservorio):
       // se dibuja como círculo real, no como el polígono-diamante que trae
       // geometry.coordinates solo para fines de encuadre/bbox.
@@ -419,9 +424,13 @@ export class PlanoPerimetricoGeneratorV2Copia {
         const radioPapel = feature.properties.circulo.radio * factorEscala;
         const colorUrbano =
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
+        // borde, sin el relleno de color — a diferencia de parques/áreas
+        // verdes, que sí llevan su color de fondo.
+        const soloBorde = feature.properties.tipo?.startsWith("aporte");
         cad.drawCircle(cx, cy, radioPapel, {
           strokeColor: colorUrbano,
-          fillColor: colorUrbano,
+          fillColor: soloBorde ? undefined : colorUrbano,
           lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
         });
         if (feature.properties.mostrarEtiqueta !== false && feature.properties.numeroLote) {
@@ -444,6 +453,10 @@ export class PlanoPerimetricoGeneratorV2Copia {
       if (feature.properties.tipo !== "lote") {
         const colorUrbano =
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
+        // borde, sin el relleno de color — a diferencia de parques/áreas
+        // verdes, que sí llevan su color de fondo.
+        const soloBorde = feature.properties.tipo?.startsWith("aporte");
 
         if (feature.properties.esArea === false) {
           cad.drawPolyline(paperPoints, {
@@ -454,7 +467,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
           cad.drawPolygon(paperPoints, {
             strokeColor: colorUrbano,
             lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
-            fillColor: colorUrbano,
+            fillColor: soloBorde ? undefined : colorUrbano,
           });
         }
 
@@ -801,6 +814,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
     // 5. Dibujo Contexto (Vecinos y Calles)
     filteredFeatures.forEach((feature) => {
+      // Las calles son contexto de referencia (para colindancias en la
+      // Memoria Descriptiva) pero no se dibujan en el plano — ni relleno
+      // ni borde.
+      if (feature.properties.tipo === "calle") return;
+
       const pts = (feature.geometry.coordinates[0] as [number, number][]).map(
         transform,
       );
@@ -808,6 +826,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
       // Elemento urbano (capa dinámica de Odoo, trae su propio color) vs.
       // lote vecino común ("lote" es el único tipo reservado).
+      let soloBorde = false;
       if (feature.properties.tipo !== "lote") {
         const colorUrbano =
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
@@ -815,6 +834,9 @@ export class PlanoPerimetricoGeneratorV2Copia {
         pdf.setDrawColor(rgb.r, rgb.g, rgb.b);
         pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
         pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+        // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
+        // borde, sin el relleno de color.
+        soloBorde = feature.properties.tipo?.startsWith("aporte") ?? false;
       } else {
         pdf.setDrawColor(
           parseInt(PLANO_THEME.COLORS.NEIGHBOR_STROKE.slice(1, 3), 16),
@@ -826,7 +848,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
       pdf.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) pdf.lineTo(pts[i][0], pts[i][1]);
       pdf.close();
-      pdf.fillStroke();
+      if (soloBorde) {
+        pdf.stroke();
+      } else {
+        pdf.fillStroke();
+      }
     });
 
     // 6. Dibujo Lote Principal (Encima de todo)
