@@ -56,17 +56,32 @@ export class MemoriaDescriptivaGenerator {
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(14);
     pdf.setTextColor(0, 0, 0);
-    const title = 'MEMORIA DESCRIPTIVA';
+    // "(EXTRACTO)" en el documento resumen: para que nadie lo confunda con
+    // la memoria completa (ej. un vendedor entregándoselo a un cliente como
+    // si fuera el documento íntegro).
+    const title = this.config.soloSeccionLinderosEnMemoria
+      ? 'MEMORIA DESCRIPTIVA (EXTRACTO)'
+      : 'MEMORIA DESCRIPTIVA';
     const titleWidth = pdf.getTextWidth(title);
-    
+
     // Subrayado del título
     pdf.text(title, pageWidth / 2, y, { align: 'center' });
     pdf.setLineWidth(0.5);
     pdf.line(pageWidth/2 - titleWidth/2, y + 2, pageWidth/2 + titleWidth/2, y + 2);
     y += 20;
 
+    // Documento resumen: únicamente linderos + firma, sin el resto de
+    // secciones (identificación, área, coordenadas, propietario) — pensado
+    // para descarga rápida de staff no-administrador. Termina acá, no
+    // continúa con el flujo completo de abajo.
+    if (this.config.soloSeccionLinderosEnMemoria) {
+      y = await this.drawSeccionLinderos(pdf, y, pageHeight, lote, colindancias);
+      this.drawFooter(pdf, lote);
+      return;
+    }
+
     // 3. SECCIONES (Iteramos lógica para manejo de saltos de página)
-    
+
     // --- I. GENERALIDADES ---
     y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'I. GENERALIDADES', y);
@@ -95,6 +110,67 @@ export class MemoriaDescriptivaGenerator {
     y += this.SECTION_GAP;
 
     // --- III. LINDEROS Y MEDIDAS PERIMÉTRICAS ---
+    y = await this.drawSeccionLinderos(pdf, y, pageHeight, lote, colindancias);
+    y += this.SECTION_GAP;
+
+    // --- IV. ÁREA Y PERÍMETRO ---
+    y = await this.checkPageBreak(pdf, y, pageHeight, lote);
+    y = this.drawSectionTitle(pdf, 'IV. ÁREA Y PERÍMETRO', y);
+
+    const areasData = [
+      { label: 'ÁREA DEL TERRENO', value: `${dimensiones.area.toFixed(2)} m²`, bold: true },
+      { label: 'PERÍMETRO TOTAL', value: `${dimensiones.perimetro.toFixed(2)} ml`, bold: true },
+    ];
+    y = this.drawDataGrid(pdf, areasData, y);
+    y += this.SECTION_GAP;
+
+    // --- V. COORDENADAS UTM (Cuadro Técnico) ---
+    // Verificamos si cabe la tabla completa, sino salto de página
+    const tableHeight = (vertices.length * 7) + 20;
+    if (y + tableHeight > pageHeight - 50) {
+      pdf.addPage();
+      await this.drawHeader(pdf, lote);
+      y = 70;
+    }
+    
+    y = this.drawSectionTitle(pdf, 'V. COORDENADAS UTM (WGS-84)', y);
+    y = this.drawCoordinatesTable(pdf, vertices, y);
+    y += this.SECTION_GAP;
+
+    // --- VI. PROPIETARIO ---
+    if (propietario) {
+      y = await this.checkPageBreak(pdf, y, pageHeight, lote);
+      y = this.drawSectionTitle(pdf, 'VI. DEL PROPIETARIO', y);
+      
+      const propData = [
+        { label: 'NOMBRE / RAZÓN SOCIAL', value: propietario.nombre },
+        { label: 'DNI / RUC', value: propietario.ruc || propietario.dni || '---' },
+      ];
+      
+      if (propietario.direccion) propData.push({ label: 'DOMICILIO', value: propietario.direccion });
+      
+      y = this.drawDataGrid(pdf, propData, y);
+    }
+
+    // --- PIE DE PÁGINA (FIRMAS) ---
+    this.drawFooter(pdf, lote);
+  }
+
+  /**
+   * Sección III completa (título + intro + linderos agrupados por lado).
+   * Extraída aparte porque el documento resumen (soloSeccionLinderosEnMemoria)
+   * la usa como único contenido, y el expediente completo la usa embebida
+   * entre las secciones II y IV — misma lógica, dos puntos de entrada.
+   */
+  private async drawSeccionLinderos(
+    pdf: jsPDF,
+    y: number,
+    pageHeight: number,
+    lote: any,
+    colindancias: GenerarPlanosRequest['colindancias'],
+  ): Promise<number> {
+    const pageWidth = pdf.internal.pageSize.width;
+
     y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'III. LINDEROS Y MEDIDAS PERIMÉTRICAS', y);
 
@@ -191,49 +267,7 @@ export class MemoriaDescriptivaGenerator {
       y += 2; // espacio entre grupos de lado
     }
 
-    y += this.SECTION_GAP;
-
-    // --- IV. ÁREA Y PERÍMETRO ---
-    y = await this.checkPageBreak(pdf, y, pageHeight, lote);
-    y = this.drawSectionTitle(pdf, 'IV. ÁREA Y PERÍMETRO', y);
-
-    const areasData = [
-      { label: 'ÁREA DEL TERRENO', value: `${dimensiones.area.toFixed(2)} m²`, bold: true },
-      { label: 'PERÍMETRO TOTAL', value: `${dimensiones.perimetro.toFixed(2)} ml`, bold: true },
-    ];
-    y = this.drawDataGrid(pdf, areasData, y);
-    y += this.SECTION_GAP;
-
-    // --- V. COORDENADAS UTM (Cuadro Técnico) ---
-    // Verificamos si cabe la tabla completa, sino salto de página
-    const tableHeight = (vertices.length * 7) + 20;
-    if (y + tableHeight > pageHeight - 50) {
-      pdf.addPage();
-      await this.drawHeader(pdf, lote);
-      y = 70;
-    }
-    
-    y = this.drawSectionTitle(pdf, 'V. COORDENADAS UTM (WGS-84)', y);
-    y = this.drawCoordinatesTable(pdf, vertices, y);
-    y += this.SECTION_GAP;
-
-    // --- VI. PROPIETARIO ---
-    if (propietario) {
-      y = await this.checkPageBreak(pdf, y, pageHeight, lote);
-      y = this.drawSectionTitle(pdf, 'VI. DEL PROPIETARIO', y);
-      
-      const propData = [
-        { label: 'NOMBRE / RAZÓN SOCIAL', value: propietario.nombre },
-        { label: 'DNI / RUC', value: propietario.ruc || propietario.dni || '---' },
-      ];
-      
-      if (propietario.direccion) propData.push({ label: 'DOMICILIO', value: propietario.direccion });
-      
-      y = this.drawDataGrid(pdf, propData, y);
-    }
-
-    // --- PIE DE PÁGINA (FIRMAS) ---
-    this.drawFooter(pdf, lote);
+    return y;
   }
 
   // ===========================================================================

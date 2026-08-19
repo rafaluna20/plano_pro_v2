@@ -70,6 +70,15 @@ export interface PlanoConfig {
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;
+  // Independiente de incluirPlanoPerimetrico: por defecto sigue a ese mismo
+  // flag (comportamiento actual, expediente completo), pero se puede pedir
+  // solo la copia sin el original (ej. documento "resumen" para no-admins).
+  incluirPlanoPerimetricoCopia?: boolean;
+  // Si está activo, MemoriaDescriptivaGenerator dibuja únicamente el
+  // encabezado + "III. LINDEROS Y MEDIDAS PERIMÉTRICAS" + pie de página,
+  // saltando el resto de secciones (I, II, IV, V, VI). Pensado para el
+  // documento "resumen" — nunca se usa en el expediente completo.
+  soloSeccionLinderosEnMemoria?: boolean;
   formatoPapel?: 'A4' | 'A3' | 'A2' | 'A1' | 'A0' | 'Legal';
   orientacion?: 'portrait' | 'landscape';
   escala?: string;
@@ -137,6 +146,13 @@ export interface GenerarPlanosRequest {
   imagenContexto?: {
     tipo: string;
     data: string;
+  };
+  // Identidad del staff de mapa_renasur que originó la solicitud (uid/nombre
+  // de Odoo) — no es autenticación, solo se usa para auditoría de descargas
+  // (ver /api/v1/planos/generar-resumen). El generador de PDF no la usa.
+  staff?: {
+    uid: number;
+    nombre: string;
   };
 }
 

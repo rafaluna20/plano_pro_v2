@@ -87,6 +87,10 @@ export const planoConfigSchema = z.object({
   incluirMemoriaDescriptiva: z.boolean().default(true),
   incluirPlanoPerimetrico: z.boolean().default(true),
   incluirPlanoUbicacion: z.boolean().default(true),
+  // Igual riesgo de strip silencioso que el resto de campos de este schema:
+  // hay que declarar cada campo nuevo acá o zod lo descarta sin avisar.
+  incluirPlanoPerimetricoCopia: z.boolean().optional(),
+  soloSeccionLinderosEnMemoria: z.boolean().optional(),
   formatoPapel: z.enum(['A4', 'A3', 'A2', 'A1', 'A0', 'Legal']).default('A4'),
   orientacion: z.enum(['portrait', 'landscape']).default('portrait'),
   escala: z.string().optional(),

@@ -141,6 +141,33 @@ enum PlanoStatus {
 }
 
 // ==========================================
+// DESCARGAS DE DOCUMENTO RESUMEN
+// ==========================================
+
+// Auditoría del documento "resumen" (Memoria: solo sección III de linderos +
+// Plano Perimétrico Copia) — pensado para staff no-administrador, que hoy no
+// tiene acceso al expediente completo. A diferencia de Plano, este documento
+// se genera al vuelo en cada descarga (sin llamadas externas, rápido) y no
+// se persiste — por eso no hay pdfUrl acá, solo el registro de que se pidió.
+// staffUid/staffNombre identifican al usuario de mapa_renasur (Odoo uid), no
+// a un User de este sistema — mapa_renasur no comparte su base de datos con
+// plan_pro, así que viajan como datos sueltos en el payload de la request.
+model PlanoDescarga {
+  id            String   @id @default(cuid())
+
+  loteCodigo    String
+  staffUid      Int?
+  staffNombre   String?
+
+  createdAt     DateTime @default(now())
+
+  @@map("plano_descargas")
+  @@index([loteCodigo])
+  @@index([staffUid])
+  @@index([createdAt])
+}
+
+// ==========================================
 // LOGS DE AUDITORÍA API
 // ==========================================
 

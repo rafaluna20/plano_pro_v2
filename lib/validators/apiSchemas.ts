@@ -25,6 +25,15 @@ export const generarPlanosSchema = z.object({
     tipo: z.string(),
     data: z.string(),
   }).optional(),
+  // Identidad del staff de mapa_renasur que originó la solicitud (uid/nombre
+  // de Odoo) — no es un mecanismo de autenticación, solo se usa para
+  // auditoría de descargas (ver /api/v1/planos/generar-resumen). Confiado
+  // porque solo llega a través del backend de mapa_renasur, que ya validó
+  // la sesión de staff antes de llamar acá.
+  staff: z.object({
+    uid: z.number(),
+    nombre: z.string(),
+  }).optional(),
 });
 
 // Schema para listar planos (query params)

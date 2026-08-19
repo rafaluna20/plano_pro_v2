@@ -38,6 +38,15 @@ export class PlanoGenerator {
       incluirPlanoUbicacion: true,
       incluirColindantesEnPlano: true,
       ...inputConfig,
+      // Por defecto sigue a incluirPlanoPerimetrico (comportamiento actual:
+      // el expediente completo trae ambas páginas) — se calcula después del
+      // spread para poder usar el valor ya resuelto de incluirPlanoPerimetrico,
+      // y solo diverge cuando el caller pide explícitamente lo contrario
+      // (ej. el documento "resumen": solo Copia, sin el original).
+      incluirPlanoPerimetricoCopia:
+        inputConfig?.incluirPlanoPerimetricoCopia ??
+        inputConfig?.incluirPlanoPerimetrico ??
+        true,
       // Mismo logo por defecto que ya usan el Plano Perimétrico y el Plano
       // de Ubicación (vía PlanoRequestAdapter.mapConfig), para que la
       // Memoria Descriptiva muestre la misma identidad de marca. Se calcula
@@ -118,7 +127,7 @@ export class PlanoGenerator {
             name: 'Plano Perimétrico'
           },
           {
-            condition: !!this.config.incluirPlanoPerimetrico,
+            condition: !!this.config.incluirPlanoPerimetricoCopia,
             generator: planoPerimetricoCopiaGen,
             format: this.config.formatosPersonalizados!.planoPerimetrico as { formato: any; orientacion: any },
             name: 'Plano Perimétrico (Copia)'
@@ -164,7 +173,7 @@ export class PlanoGenerator {
    */
   private getInitialFormat(): { formato: string; orientacion: 'portrait' | 'landscape' } {
     if (this.config.incluirMemoriaDescriptiva) return this.config.formatosPersonalizados!.memoriaDescriptiva as { formato: string; orientacion: 'portrait' | 'landscape' };
-    if (this.config.incluirPlanoPerimetrico) return this.config.formatosPersonalizados!.planoPerimetrico as { formato: string; orientacion: 'portrait' | 'landscape' };
+    if (this.config.incluirPlanoPerimetrico || this.config.incluirPlanoPerimetricoCopia) return this.config.formatosPersonalizados!.planoPerimetrico as { formato: string; orientacion: 'portrait' | 'landscape' };
     if (this.config.incluirPlanoUbicacion) return this.config.formatosPersonalizados!.planoUbicacion as { formato: string; orientacion: 'portrait' | 'landscape' };
     return { formato: 'A4', orientacion: 'portrait' };
   }
