@@ -103,47 +103,92 @@ export class MemoriaDescriptivaGenerator {
     pdf.text('El inmueble se encuentra delimitado de la siguiente manera:', this.MARGIN, y);
     y += this.LINE_HEIGHT * 1.5;
 
-    // Iterar sobre las colindancias del JSON (Frente, Fondo, Derecha, Izquierda)
+    // Agrupar colindancias por lado (frente/fondo/derecha/izquierda): un
+    // lado puede tener varios tramos (ej. un frente partido en una calle
+    // curva, o un fondo con 2 vecinos distintos), y listarlos intercalados
+    // en el orden en que aparecen alrededor del polígono resultaba
+    // desordenado e imposible de leer. Se imprime un encabezado por lado
+    // (una sola vez) y debajo, como viñetas, cada tramo de ese lado — en el
+    // orden de lectura estándar de una memoria descriptiva: frente, fondo,
+    // derecha entrando, izquierda entrando.
+    const ORDEN_LADOS = ['frente', 'fondo', 'derecha', 'izquierda'];
+    const colindanciasPorLado = new Map<string, typeof colindancias>();
     for (const col of colindancias) {
-      y = await this.checkPageBreak(pdf, y, pageHeight, lote);
+      const grupo = colindanciasPorLado.get(col.lado) ?? [];
+      grupo.push(col);
+      colindanciasPorLado.set(col.lado, grupo);
+    }
+    const ladosOrdenados = [
+      ...ORDEN_LADOS.filter((l) => colindanciasPorLado.has(l)),
+      ...[...colindanciasPorLado.keys()].filter((l) => !ORDEN_LADOS.includes(l)),
+    ];
 
+    for (const lado of ladosOrdenados) {
       // Redacción legal estándar: derecha/izquierda se describen "entrando"
       // (referencia al sentido de quien mira el lote desde el frente),
       // frente/fondo van sin ese calificativo.
-      const ladoLabel = MemoriaDescriptivaGenerator.LADO_LABELS[col.lado] ?? `POR EL ${col.lado.toUpperCase()}`;
+      const ladoLabel = MemoriaDescriptivaGenerator.LADO_LABELS[lado] ?? `POR EL ${lado.toUpperCase()}`;
 
-      // Construcción inteligente del texto legal
-      let descripcion = '';
-      const longitud = col.longitud ? col.longitud.toFixed(2) : '0.00';
-      const nombre = col.nombre || '---';
+      const dibujarEncabezadoLado = () => {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`${ladoLabel}:`, this.MARGIN + 5, y);
+        y += this.LINE_HEIGHT;
+      };
 
-      // Lindero curvo (ver x_geometry_arcos en Odoo / product_lot_geometry):
-      // se redacta como arco de circunferencia (radio + longitud de arco),
-      // no como línea recta — así se describe legalmente un lindero curvo.
-      const esArco = col.radio != null && col.longitudArco != null;
-      const terminacion = esArco
-        ? `con un arco de circunferencia de radio ${col.radio!.toFixed(2)} ml y una longitud de arco de ${col.longitudArco!.toFixed(2)} ml.`
-        : `con una línea recta de ${longitud} ml.`;
-
-      // Lógica de redacción según tipo
-      if (col.tipo?.toLowerCase() === 'calle' || col.tipo?.toLowerCase() === 'via' || col.tipo?.toLowerCase() === 'av') {
-        descripcion = `${ladoLabel}: Colinda con ${col.tipo} "${nombre}", ${terminacion}`;
-      } else {
-        const propInfo = col.propietario ? `, propiedad de ${col.propietario}` : '';
-        descripcion = `${ladoLabel}: Colinda con el ${col.tipo} "${nombre}"${propInfo}, ${terminacion}`;
+      // Antes de imprimir el encabezado nos aseguramos de que quepa junto
+      // con al menos una viñeta debajo (margen algo mayor al de
+      // checkPageBreak) — si no, es mejor arrancar el grupo entero en una
+      // página nueva que dejar el encabezado solo, pegado al pie de página.
+      if (y > pageHeight - 65) {
+        pdf.addPage();
+        await this.drawHeader(pdf, lote);
+        y = 70;
       }
 
-      // Dibujar título del lado (Negrita)
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`${ladoLabel}:`, this.MARGIN + 5, y);
+      // Encabezado del lado, en su propia línea (antes iba junto a la
+      // descripción del primer tramo en la misma línea, a una columna fija
+      // pensada para etiquetas cortas como "DERECHA" — con etiquetas más
+      // largas como "ENTRANDO A LA IZQUIERDA" el texto se encimaba).
+      dibujarEncabezadoLado();
 
-      // Dibujar descripción (Normal) con indentación
-      pdf.setFont('helvetica', 'normal');
-      // Usamos splitTextToSize para manejar textos largos que necesiten wrap
-      const lines = pdf.splitTextToSize(descripcion.split(':')[1].trim(), pageWidth - (this.MARGIN * 2) - 35);
-      pdf.text(lines, this.MARGIN + 40, y);
+      for (const col of colindanciasPorLado.get(lado)!) {
+        const paginaAntes = pdf.getCurrentPageInfo().pageNumber;
+        y = await this.checkPageBreak(pdf, y, pageHeight, lote);
+        // Si el salto de página partió el grupo a la mitad, repetimos el
+        // encabezado del lado en la página nueva — si no, la primera viñeta
+        // de la página quedaría "huérfana" sin indicar a qué lado pertenece.
+        if (pdf.getCurrentPageInfo().pageNumber !== paginaAntes) {
+          dibujarEncabezadoLado();
+        }
 
-      y += (lines.length * this.LINE_HEIGHT) + 2;
+        const longitud = col.longitud ? col.longitud.toFixed(2) : '0.00';
+        const nombre = col.nombre || '---';
+
+        // Lindero curvo (ver x_geometry_arcos en Odoo / product_lot_geometry):
+        // se redacta como arco de circunferencia (radio + longitud de arco),
+        // no como línea recta — así se describe legalmente un lindero curvo.
+        const esArco = col.radio != null && col.longitudArco != null;
+        const terminacion = esArco
+          ? `con un arco de circunferencia de radio ${col.radio!.toFixed(2)} ml y una longitud de arco de ${col.longitudArco!.toFixed(2)} ml.`
+          : `con una línea recta de ${longitud} ml.`;
+
+        // Lógica de redacción según tipo
+        let descripcion: string;
+        if (col.tipo?.toLowerCase() === 'calle' || col.tipo?.toLowerCase() === 'via' || col.tipo?.toLowerCase() === 'av') {
+          descripcion = `Colinda con ${col.tipo} "${nombre}", ${terminacion}`;
+        } else {
+          const propInfo = col.propietario ? `, propiedad de ${col.propietario}` : '';
+          descripcion = `Colinda con el ${col.tipo} "${nombre}"${propInfo}, ${terminacion}`;
+        }
+
+        // Viñeta indentada bajo el encabezado del lado
+        pdf.setFont('helvetica', 'normal');
+        const lines = pdf.splitTextToSize(`- ${descripcion}`, pageWidth - (this.MARGIN * 2) - 15);
+        pdf.text(lines, this.MARGIN + 10, y);
+        y += lines.length * this.LINE_HEIGHT;
+      }
+
+      y += 2; // espacio entre grupos de lado
     }
 
     y += this.SECTION_GAP;
