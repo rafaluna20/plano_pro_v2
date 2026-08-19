@@ -190,6 +190,12 @@ export interface ContextoElementoProperties {
   /** Si la capa es área (polígono relleno) o línea (trazo abierto, sin relleno). Default true. */
   esArea?: boolean;
 
+  /** Solo aplica si esArea=true: dibuja el polígono cerrado sin color de relleno, solo el borde. */
+  sinRelleno?: boolean;
+
+  /** Solo aplica si esArea=true: opuesto a sinRelleno — dibuja el relleno sin trazo de contorno. */
+  sinBorde?: boolean;
+
   /** Presente solo si el elemento es un círculo completo (centro+radio en UTM), en vez de un polígono. */
   circulo?: { centro: [number, number]; radio: number };
 

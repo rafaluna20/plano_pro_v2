@@ -131,13 +131,16 @@ export class CADDrawing {
       lineWidth?: number;
       strokeColor?: string;
       fillColor?: string;
+      /** Si es true y hay fillColor, dibuja solo el relleno, sin trazo de contorno (opuesto a omitir fillColor, que dibuja solo el trazo). */
+      noStroke?: boolean;
       dashed?: boolean;
     }
   ): void {
     const {
-      lineWidth = 0.2,  
+      lineWidth = 0.2,
       strokeColor = '#000000',
       fillColor,
+      noStroke = false,
       dashed = false
     } = options || {};
 
@@ -156,7 +159,10 @@ export class CADDrawing {
 
     // Asegurar que el polígono se cierre conectando el último punto con el primero
     const closedPoints = [...points, points[0]];
-    
+
+    // Estilo de trazado: 'F' (solo relleno), 'FD' (relleno + borde) o 'S' (solo borde).
+    const style = fillColor ? (noStroke ? 'F' : 'FD') : 'S';
+
     // Dibujar todas las líneas del polígono
     this.pdf.lines(
       closedPoints.slice(1).map(([x, y], i) => {
@@ -166,7 +172,7 @@ export class CADDrawing {
       closedPoints[0][0],
       closedPoints[0][1],
       undefined,
-      fillColor ? 'FD' : 'S' // Fill and Draw o Solo Draw
+      style
     );
 
     if (dashed) {
@@ -306,17 +312,19 @@ export class CADDrawing {
     options?: {
       strokeColor?: string;
       fillColor?: string;
+      /** Si es true y hay fillColor, dibuja solo el relleno, sin trazo de contorno. */
+      noStroke?: boolean;
       lineWidth?: number;
     }
   ): void {
-    const { strokeColor = '#000000', fillColor, lineWidth = 0.1 } = options || {};
+    const { strokeColor = '#000000', fillColor, noStroke = false, lineWidth = 0.1 } = options || {};
 
     this.pdf.setLineWidth(lineWidth);
     this.pdf.setDrawColor(strokeColor);
 
     if (fillColor) {
       this.pdf.setFillColor(fillColor);
-      this.pdf.circle(x, y, radius, 'FD');
+      this.pdf.circle(x, y, radius, noStroke ? 'F' : 'FD');
     } else {
       this.pdf.circle(x, y, radius, 'S');
     }

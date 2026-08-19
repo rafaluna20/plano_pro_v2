@@ -412,11 +412,16 @@ export class PlanoPerimetricoGeneratorV2 {
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color — a diferencia de parques/áreas
-        // verdes, que sí llevan su color de fondo.
-        const soloBorde = feature.properties.tipo?.startsWith("aporte");
+        // verdes, que sí llevan su color de fondo. También honra el flag
+        // sin_relleno configurado en Odoo (elemento.urbano.capa) para
+        // cualquier otra capa. sinBorde es el caso opuesto: relleno sin
+        // trazo de contorno.
+        const soloBorde = feature.properties.tipo?.startsWith("aporte") || feature.properties.sinRelleno === true;
+        const soloRelleno = feature.properties.sinBorde === true;
         cad.drawCircle(cx, cy, radioPapel, {
           strokeColor: colorUrbano,
           fillColor: soloBorde ? undefined : colorUrbano,
+          noStroke: soloRelleno,
           lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
         });
         if (feature.properties.mostrarEtiqueta !== false && feature.properties.numeroLote) {
@@ -441,8 +446,12 @@ export class PlanoPerimetricoGeneratorV2 {
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color — a diferencia de parques/áreas
-        // verdes, que sí llevan su color de fondo.
-        const soloBorde = feature.properties.tipo?.startsWith("aporte");
+        // verdes, que sí llevan su color de fondo. También honra el flag
+        // sin_relleno configurado en Odoo (elemento.urbano.capa) para
+        // cualquier otra capa. sinBorde es el caso opuesto: relleno sin
+        // trazo de contorno.
+        const soloBorde = feature.properties.tipo?.startsWith("aporte") || feature.properties.sinRelleno === true;
+        const soloRelleno = feature.properties.sinBorde === true;
 
         if (feature.properties.esArea === false) {
           // Línea abierta (ej. capa "líneas"): solo trazo, sin relleno,
@@ -456,6 +465,7 @@ export class PlanoPerimetricoGeneratorV2 {
             strokeColor: colorUrbano,
             lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
             fillColor: soloBorde ? undefined : colorUrbano,
+            noStroke: soloRelleno,
           });
         }
 
@@ -824,6 +834,7 @@ export class PlanoPerimetricoGeneratorV2 {
       // Elemento urbano (capa dinámica de Odoo, trae su propio color) vs.
       // lote vecino común ("lote" es el único tipo reservado).
       let soloBorde = false;
+      let soloRelleno = false;
       if (feature.properties.tipo !== "lote") {
         const colorUrbano =
           feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
@@ -832,8 +843,10 @@ export class PlanoPerimetricoGeneratorV2 {
         pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
         pdf.setFillColor(rgb.r, rgb.g, rgb.b);
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
-        // borde, sin el relleno de color.
-        soloBorde = feature.properties.tipo?.startsWith("aporte") ?? false;
+        // borde, sin el relleno de color. También honra sin_relleno/
+        // sin_borde configurados en Odoo (elemento.urbano.capa).
+        soloBorde = feature.properties.tipo?.startsWith("aporte") || feature.properties.sinRelleno === true;
+        soloRelleno = feature.properties.sinBorde === true;
       } else {
         pdf.setDrawColor(
           parseInt(PLANO_THEME.COLORS.NEIGHBOR_STROKE.slice(1, 3), 16),
@@ -847,6 +860,8 @@ export class PlanoPerimetricoGeneratorV2 {
       pdf.close();
       if (soloBorde) {
         pdf.stroke();
+      } else if (soloRelleno) {
+        pdf.fill();
       } else {
         pdf.fillStroke();
       }

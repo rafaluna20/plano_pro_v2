@@ -124,6 +124,10 @@ export interface GenerarPlanosRequest {
       mostrarEtiqueta?: boolean;
       /** Si la capa es área (polígono relleno) o línea (trazo abierto, sin relleno). Default true. */
       esArea?: boolean;
+      /** Solo aplica si esArea=true: dibuja el polígono cerrado sin color de relleno, solo el borde. */
+      sinRelleno?: boolean;
+      /** Solo aplica si esArea=true: opuesto a sinRelleno — dibuja el relleno sin trazo de contorno. */
+      sinBorde?: boolean;
       /** Lados curvos del polígono (vertices), si el elemento tiene alguno. */
       arcos?: ArcoMetadata[];
       /** Presente solo si el elemento es un círculo completo (reemplaza a "vertices"). */

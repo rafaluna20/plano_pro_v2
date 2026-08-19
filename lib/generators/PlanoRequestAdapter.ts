@@ -160,6 +160,8 @@ export class PlanoRequestAdapter {
                         color: esLote ? undefined : el.color,
                         mostrarEtiqueta: esLote ? undefined : el.mostrarEtiqueta,
                         esArea: esLote ? undefined : el.esArea,
+                        sinRelleno: esLote ? undefined : el.sinRelleno,
+                        sinBorde: esLote ? undefined : el.sinBorde,
                         nombre: el.texto,
                         numeroLote: el.texto, // Etiqueta visible en Plano Perimétrico (renderContext)
                         descripcionAlterna: el.texto

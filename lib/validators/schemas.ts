@@ -113,6 +113,8 @@ export const loteVecinoSchema = z.object({
   // Mismo riesgo de strip que color/mostrarEtiqueta arriba: hay que declarar
   // cada campo nuevo acá explícitamente o zod lo descarta en silencio.
   esArea: z.boolean().optional(),
+  sinRelleno: z.boolean().optional(),
+  sinBorde: z.boolean().optional(),
   arcos: z.array(arcoMetadataSchema).optional(),
   circulo: z.object({
     centro: utmCoordinateSchema,

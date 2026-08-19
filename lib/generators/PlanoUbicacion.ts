@@ -209,7 +209,10 @@ export class PlanoUbicacionGenerator {
       const colorUrbano = esLote ? undefined : (el.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR);
       // Los aportes (aporte_recreacion, etc.) se dibujan solo con su borde,
       // sin el relleno de color — a diferencia de parques/áreas verdes.
-      const soloBorde = typeof el.tipo === 'string' && el.tipo.startsWith('aporte');
+      // También honra sin_relleno/sin_borde configurados en Odoo
+      // (elemento.urbano.capa) para cualquier otra capa.
+      const soloBorde = (typeof el.tipo === 'string' && el.tipo.startsWith('aporte')) || el.sinRelleno === true;
+      const soloRelleno = el.sinBorde === true;
 
       // Elemento circular completo: no tiene el.vertices (o viene vacío) —
       // se dibuja aparte, antes de que el código de abajo intente tratarlo
@@ -220,6 +223,7 @@ export class PlanoUbicacionGenerator {
         cad.drawCircle(centro[0], centro[1], radioPapel, {
           strokeColor: colorUrbano || '#AAAAAA',
           fillColor: soloBorde ? undefined : colorUrbano,
+          noStroke: soloRelleno,
           lineWidth: 0.2,
         });
         if (el.texto) {
@@ -243,7 +247,8 @@ export class PlanoUbicacionGenerator {
         cad.drawPolygon(pts, {
           strokeColor: colorUrbano || '#AAAAAA',
           lineWidth: 0.2,
-          fillColor: soloBorde ? undefined : colorUrbano
+          fillColor: soloBorde ? undefined : colorUrbano,
+          noStroke: soloRelleno
         });
       }
 
