@@ -1154,77 +1154,6 @@ export class PlanoPerimetricoGeneratorV2Copia {
   // ETIQUETADO DE COTAS (USANDO TEXTO REGISTRAL)
   // ==========================================================================
 
-  private drawInternalAngle(
-    pdf: jsPDF,
-    p: [number, number],
-    prev: [number, number],
-    next: [number, number],
-    label: string,
-    expectedVal: number,
-  ): void {
-    const radius = 4; // Radio del arco
-
-    // Ángulos de los segmentos
-    const aPrev = Math.atan2(prev[1] - p[1], prev[0] - p[0]);
-    const aNext = Math.atan2(next[1] - p[1], next[0] - p[0]);
-
-    // Calcular arco inicial (sentido horario por defecto en PDF, o CCW math)
-    let startAngle = aNext;
-    let endAngle = aPrev;
-
-    // Sweep inicial
-    let sweep = endAngle - startAngle;
-    if (sweep < 0) sweep += Math.PI * 2;
-
-    // Convertir sweep a grados para comparar con expectedVal
-    // Nota: expectedVal siempre es ángulo interno (ej. 90, 60, 270 para cóncavo)
-    const sweepDeg = sweep * (180 / Math.PI);
-
-    // Comparar con expectedVal (tolerancia 5 grados)
-    // Si la diferencia es grande, estamos dibujando el externo (reflex), así que invertimos
-    const diff = Math.abs(sweepDeg - expectedVal);
-    const reflexDiff = Math.abs(360 - sweepDeg - expectedVal);
-
-    // Si la versión 'reflex' (invertida) está más cerca del valor esperado, invertimos
-    if (reflexDiff < diff) {
-      const temp = startAngle;
-      startAngle = endAngle;
-      endAngle = temp;
-      sweep = Math.PI * 2 - sweep;
-    }
-
-    // Dibujar
-    const step = sweep / 8;
-    pdf.setDrawColor(0);
-    pdf.setLineWidth(0.1);
-    pdf.lines(
-      [],
-      p[0] + Math.cos(startAngle) * radius,
-      p[1] + Math.sin(startAngle) * radius,
-    ); // Move
-
-    for (let i = 1; i <= 8; i++) {
-      const a = startAngle + step * i;
-      const x = p[0] + Math.cos(a) * radius;
-      const y = p[1] + Math.sin(a) * radius;
-      pdf.line(
-        p[0] + Math.cos(a - step) * radius,
-        p[1] + Math.sin(a - step) * radius,
-        x,
-        y,
-      );
-    }
-
-    // Label del ángulo
-    const midAngle = startAngle + sweep / 2;
-    const lblX = p[0] + Math.cos(midAngle) * (radius + 2);
-    const lblY = p[1] + Math.sin(midAngle) * (radius + 2);
-
-    pdf.setFontSize(5);
-    pdf.setTextColor(80);
-    pdf.text(label, lblX, lblY, { align: "center", baseline: "middle" });
-  }
-
   /**
    * Dibuja dimensiones de lados usando longitudTexto registral
    */
@@ -1243,15 +1172,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
     // Vértices y Ángulos
     paperPoints.forEach((p, i) => {
-      // 1. Dibujar Ángulos Internos
       const prev =
         paperPoints[(i - 1 + paperPoints.length) % paperPoints.length];
       const next = paperPoints[(i + 1) % paperPoints.length];
 
       const computedAngle = angulosInternos[i];
-      const angleLabel = `${computedAngle.toFixed(2)}°`;
-
-      this.drawInternalAngle(pdf, p, prev, next, angleLabel, computedAngle);
 
       // 2. Dibujar Vértice
       cad.drawCircle(p[0], p[1], 0.8, { fillColor: PLANO_THEME.COLORS.WHITE });
