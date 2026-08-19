@@ -24,6 +24,16 @@ export class MemoriaDescriptivaGenerator {
   private readonly SECTION_GAP = 10;
   private readonly COLOR_PRIMARY = [50, 50, 50]; // Gris oscuro corporativo
 
+  // Redacción legal estándar de linderos: derecha/izquierda se describen
+  // "entrando" (respecto a quien mira el lote desde el frente); frente/fondo
+  // no llevan ese calificativo.
+  private static readonly LADO_LABELS: Record<string, string> = {
+    frente: 'POR EL FRENTE',
+    fondo: 'POR EL FONDO',
+    derecha: 'ENTRANDO A LA DERECHA',
+    izquierda: 'ENTRANDO A LA IZQUIERDA',
+  };
+
   constructor(request: GenerarPlanosRequest, config: PlanoConfig, datosProcesados: DatosProcesados) {
     this.request = request;
     this.config = config;
@@ -97,7 +107,10 @@ export class MemoriaDescriptivaGenerator {
     for (const col of colindancias) {
       y = await this.checkPageBreak(pdf, y, pageHeight, lote);
 
-      const lado = col.lado.toUpperCase(); // FRENTE, DERECHA, etc.
+      // Redacción legal estándar: derecha/izquierda se describen "entrando"
+      // (referencia al sentido de quien mira el lote desde el frente),
+      // frente/fondo van sin ese calificativo.
+      const ladoLabel = MemoriaDescriptivaGenerator.LADO_LABELS[col.lado] ?? `POR EL ${col.lado.toUpperCase()}`;
 
       // Construcción inteligente del texto legal
       let descripcion = '';
@@ -114,15 +127,15 @@ export class MemoriaDescriptivaGenerator {
 
       // Lógica de redacción según tipo
       if (col.tipo?.toLowerCase() === 'calle' || col.tipo?.toLowerCase() === 'via' || col.tipo?.toLowerCase() === 'av') {
-        descripcion = `Por el ${lado}: Colinda con ${col.tipo} "${nombre}", ${terminacion}`;
+        descripcion = `${ladoLabel}: Colinda con ${col.tipo} "${nombre}", ${terminacion}`;
       } else {
         const propInfo = col.propietario ? `, propiedad de ${col.propietario}` : '';
-        descripcion = `Por el ${lado}: Colinda con el ${col.tipo} "${nombre}"${propInfo}, ${terminacion}`;
+        descripcion = `${ladoLabel}: Colinda con el ${col.tipo} "${nombre}"${propInfo}, ${terminacion}`;
       }
 
       // Dibujar título del lado (Negrita)
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`POR EL ${lado}:`, this.MARGIN + 5, y);
+      pdf.text(`${ladoLabel}:`, this.MARGIN + 5, y);
 
       // Dibujar descripción (Normal) con indentación
       pdf.setFont('helvetica', 'normal');
