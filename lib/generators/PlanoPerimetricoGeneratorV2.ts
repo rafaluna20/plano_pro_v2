@@ -816,13 +816,19 @@ export class PlanoPerimetricoGeneratorV2 {
       });
     }
 
-    // 3. BBox (la escala ya viene calculada por calculateEscalaCroquis)
-    const bbox = getBoundingBox(validCoords);
+    // 3. Escala ya viene calculada por calculateEscalaCroquis (usa el bbox de
+    // TODO el contexto recolectado, correcto para decidir el zoom). Pero el
+    // CENTRO de la vista tiene que ser el lote, no el centro de ese bbox
+    // completo: si el contexto recolectado es asimétrico alrededor del lote
+    // (ej. más manzanas hacia el norte que hacia el sur), centrar en el bbox
+    // entero deja al lote corrido hacia un costado del recuadro en vez de en
+    // el medio — justo el problema reportado.
     const rawScale = 1000 / escalaNominal;
+    const loteBbox = getBoundingBox(mainVertices);
 
     // 4. Transformación
-    const bboxCX = (bbox.minX + bbox.maxX) / 2;
-    const bboxCY = (bbox.minY + bbox.maxY) / 2;
+    const bboxCX = (loteBbox.minX + loteBbox.maxX) / 2;
+    const bboxCY = (loteBbox.minY + loteBbox.maxY) / 2;
     const pdfCX = drawX + drawW / 2;
     const pdfCY = drawY + drawH / 2;
     const transform = (p: [number, number]) => {
