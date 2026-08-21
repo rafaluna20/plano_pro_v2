@@ -725,48 +725,25 @@ export class PlanoPerimetricoGeneratorV2 {
   }
 
   /**
-   * Escala nominal "1:N" del croquis, calculada a partir del bbox del lote +
-   * contexto disponible. Extraída de renderVectorLocationSketch para que se
-   * pueda calcular UNA vez, sin importar qué modo (vectorial/satelital/
-   * imagen) termine dibujando el mapa — antes solo existía dentro del modo
-   * vectorial, así que la leyenda no se dibujaba cuando el modo satelital/
-   * imagen lograba cargar su propia imagen.
+   * Escala nominal "1:N" del croquis, por rango de área del lote/matriz —
+   * la convención real de la entidad competente para el croquis de
+   * ubicación (a diferencia del bbox de contexto cercano usado antes: ese
+   * enfoque no reflejaba el tamaño del predio en absoluto — un lote grande
+   * sin vecinos cerca terminaba en una escala MÁS cerrada que uno chico
+   * rodeado de manzanas, exactamente al revés de lo esperado). No depende
+   * de mainVertices/drawW/drawH — se mantienen en la firma para no romper
+   * los call sites, pero la escala hoy sale 100% del área.
    */
   private calculateEscalaCroquis(
-    mainVertices: [number, number][],
-    drawW: number,
-    drawH: number,
+    _mainVertices: [number, number][],
+    _drawW: number,
+    _drawH: number,
   ): number {
-    const { UBICACION } = PLANO_THEME;
-    const CONTEXT_VISIBLE_FRACTION = 0.15;
-
-    const validCoords: [number, number][] = [...mainVertices];
-    if (this.payload.contexto && this.payload.contexto.features) {
-      this.payload.contexto.features.forEach((f) => {
-        if (f.geometry.type === "Polygon") {
-          validCoords.push(
-            ...(f.geometry.coordinates[0] as [number, number][]),
-          );
-        }
-      });
-    }
-
-    const bbox = getBoundingBox(validCoords);
-    const contentW = bbox.width || 50;
-    const contentH = bbox.height || 50;
-    const marginFactor = UBICACION.MARGIN_FACTOR;
-
-    const rawScaleNecesaria = Math.min(
-      (drawW * marginFactor) / (contentW * CONTEXT_VISIBLE_FRACTION),
-      (drawH * marginFactor) / (contentH * CONTEXT_VISIBLE_FRACTION),
-    );
-    const nominalNecesario = 1000 / Math.max(rawScaleNecesaria, 0.0001);
-
-    const ESCALAS_ESTANDAR = [100, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 7500, 10000];
-    return (
-      ESCALAS_ESTANDAR.find((s) => s >= nominalNecesario) ??
-      Math.ceil(nominalNecesario / 500) * 500
-    );
+    const area = this.datosProcesados.areaFinal;
+    if (area <= 1000) return 5000;
+    if (area <= 10000) return 10000;
+    if (area <= 50000) return 15000;
+    return 25000;
   }
 
   /**

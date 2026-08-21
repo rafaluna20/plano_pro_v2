@@ -740,48 +740,21 @@ export class PlanoPerimetricoGeneratorV2Copia {
    * Renderizado vectorial clásico del croquis (Extraído de drawLocationPlanAutoScale)
    */
   /**
-   * Escala nominal "1:N" del croquis, calculada a partir del bbox del lote +
-   * contexto disponible. Extraída de renderVectorLocationSketch para que se
-   * pueda calcular UNA vez, sin importar qué modo (vectorial/satelital/
-   * imagen) termine dibujando el mapa — antes solo existía dentro del modo
-   * vectorial, así que la leyenda "ESCALA: 1/N" no se dibujaba cuando el
-   * modo satelital/imagen lograba cargar su propia imagen.
+   * Escala nominal "1:N" del croquis, por rango de área del lote/matriz —
+   * ver el comentario completo en PlanoPerimetricoGeneratorV2.ts (mismo
+   * criterio en los dos generadores). Ya no depende del bbox de contexto
+   * cercano: eso no reflejaba el tamaño real del predio.
    */
   private calculateEscalaCroquis(
-    mainVertices: [number, number][],
-    drawW: number,
-    drawH: number,
+    _mainVertices: [number, number][],
+    _drawW: number,
+    _drawH: number,
   ): number {
-    const { UBICACION } = PLANO_THEME;
-    const CONTEXT_VISIBLE_FRACTION = 0.15;
-
-    const validCoords: [number, number][] = [...mainVertices];
-    if (this.payload.contexto && this.payload.contexto.features) {
-      this.payload.contexto.features.forEach((f) => {
-        if (f.geometry.type === "Polygon") {
-          validCoords.push(
-            ...(f.geometry.coordinates[0] as [number, number][]),
-          );
-        }
-      });
-    }
-
-    const bbox = getBoundingBox(validCoords);
-    const contentW = bbox.width || 50;
-    const contentH = bbox.height || 50;
-    const marginFactor = UBICACION.MARGIN_FACTOR;
-
-    const rawScaleNecesaria = Math.min(
-      (drawW * marginFactor) / (contentW * CONTEXT_VISIBLE_FRACTION),
-      (drawH * marginFactor) / (contentH * CONTEXT_VISIBLE_FRACTION),
-    );
-    const nominalNecesario = 1000 / Math.max(rawScaleNecesaria, 0.0001);
-
-    const ESCALAS_ESTANDAR = [100, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000, 7500, 10000];
-    return (
-      ESCALAS_ESTANDAR.find((s) => s >= nominalNecesario) ??
-      Math.ceil(nominalNecesario / 500) * 500
-    );
+    const area = this.datosProcesados.areaFinal;
+    if (area <= 1000) return 5000;
+    if (area <= 10000) return 10000;
+    if (area <= 50000) return 15000;
+    return 25000;
   }
 
   private renderVectorLocationSketch(
