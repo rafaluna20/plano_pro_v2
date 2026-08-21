@@ -201,12 +201,15 @@ export class PlanoUbicacionGenerator {
       // ni borde.
       if (el.tipo === 'calle') return;
 
-      // Estilo Vecino: esta ruta lee el.tipo/el.color crudos (tal como los
-      // manda mapa_renasur), no pasa por el adapter. "LOTE" es el único
-      // tipo reservado (lote vecino, sin color propio); cualquier otro
-      // elemento urbano ya trae su color de capa (Odoo) directo en el payload.
+      // Estilo Vecino: esta ruta lee el.tipo/el.colorBorde/el.colorRelleno
+      // crudos (tal como los manda mapa_renasur), no pasa por el adapter.
+      // "LOTE" es el único tipo reservado (lote vecino, sin color propio);
+      // cualquier otro elemento urbano ya trae su color de capa (Odoo)
+      // directo en el payload — borde y relleno independientes, estilo
+      // capas de AutoCAD.
       const esLote = el.tipo === 'LOTE';
-      const colorUrbano = esLote ? undefined : (el.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR);
+      const colorBordeUrbano = esLote ? undefined : (el.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR);
+      const colorRellenoUrbano = esLote ? undefined : (el.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR);
       // Los aportes (aporte_recreacion, etc.) se dibujan solo con su borde,
       // sin el relleno de color — a diferencia de parques/áreas verdes.
       // También honra sin_relleno/sin_borde configurados en Odoo
@@ -221,8 +224,8 @@ export class PlanoUbicacionGenerator {
         const [centro] = utmToPaperRelative([el.circulo.centro], realCenter, escala, paperCx, paperCy);
         const radioPapel = metrosAPapel(el.circulo.radio, escala);
         cad.drawCircle(centro[0], centro[1], radioPapel, {
-          strokeColor: colorUrbano || '#AAAAAA',
-          fillColor: soloBorde ? undefined : colorUrbano,
+          strokeColor: colorBordeUrbano || '#AAAAAA',
+          fillColor: soloBorde ? undefined : colorRellenoUrbano,
           noStroke: soloRelleno,
           lineWidth: 0.2,
         });
@@ -242,12 +245,12 @@ export class PlanoUbicacionGenerator {
 
       if (el.esArea === false) {
         // Línea abierta (ej. capa "líneas"): solo trazo, sin relleno.
-        cad.drawPolyline(pts, { strokeColor: colorUrbano || '#AAAAAA', lineWidth: 0.2 });
+        cad.drawPolyline(pts, { strokeColor: colorBordeUrbano || '#AAAAAA', lineWidth: 0.2 });
       } else {
         cad.drawPolygon(pts, {
-          strokeColor: colorUrbano || '#AAAAAA',
+          strokeColor: colorBordeUrbano || '#AAAAAA',
           lineWidth: 0.2,
-          fillColor: soloBorde ? undefined : colorUrbano,
+          fillColor: soloBorde ? undefined : colorRellenoUrbano,
           noStroke: soloRelleno
         });
       }

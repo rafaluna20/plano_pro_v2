@@ -157,7 +157,8 @@ export class PlanoRequestAdapter {
                     const esLote = el.tipo === 'LOTE';
                     const propsBase = {
                         tipo: esLote ? 'lote' : (el.tipo || 'lote').toLowerCase(),
-                        color: esLote ? undefined : el.color,
+                        colorBorde: esLote ? undefined : el.colorBorde,
+                        colorRelleno: esLote ? undefined : el.colorRelleno,
                         mostrarEtiqueta: esLote ? undefined : el.mostrarEtiqueta,
                         esArea: esLote ? undefined : el.esArea,
                         sinRelleno: esLote ? undefined : el.sinRelleno,

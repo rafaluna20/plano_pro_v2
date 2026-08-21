@@ -422,8 +422,12 @@ export class PlanoPerimetricoGeneratorV2Copia {
       if (feature.properties.circulo) {
         const [cx, cy] = utmAPapel(feature.properties.circulo.centro);
         const radioPapel = feature.properties.circulo.radio * factorEscala;
-        const colorUrbano =
-          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        // Borde y relleno son colores independientes desde Odoo (estilo
+        // capas de AutoCAD: trazo y hatch de una capa pueden diferir).
+        const colorBordeUrbano =
+          feature.properties.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        const colorRellenoUrbano =
+          feature.properties.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color — a diferencia de parques/áreas
         // verdes, que sí llevan su color de fondo. También honra el flag
@@ -433,8 +437,8 @@ export class PlanoPerimetricoGeneratorV2Copia {
         const soloBorde = feature.properties.tipo?.startsWith("aporte") || feature.properties.sinRelleno === true;
         const soloRelleno = feature.properties.sinBorde === true;
         cad.drawCircle(cx, cy, radioPapel, {
-          strokeColor: colorUrbano,
-          fillColor: soloBorde ? undefined : colorUrbano,
+          strokeColor: colorBordeUrbano,
+          fillColor: soloBorde ? undefined : colorRellenoUrbano,
           noStroke: soloRelleno,
           lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
         });
@@ -456,8 +460,12 @@ export class PlanoPerimetricoGeneratorV2Copia {
       // mostrarEtiqueta/esArea) y lotes vecinos comunes ("lote" es el único
       // tipo reservado, sin color propio).
       if (feature.properties.tipo !== "lote") {
-        const colorUrbano =
-          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        // Borde y relleno son colores independientes desde Odoo (estilo
+        // capas de AutoCAD: trazo y hatch de una capa pueden diferir).
+        const colorBordeUrbano =
+          feature.properties.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        const colorRellenoUrbano =
+          feature.properties.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color — a diferencia de parques/áreas
         // verdes, que sí llevan su color de fondo. También honra el flag
@@ -469,14 +477,14 @@ export class PlanoPerimetricoGeneratorV2Copia {
 
         if (feature.properties.esArea === false) {
           cad.drawPolyline(paperPoints, {
-            strokeColor: colorUrbano,
+            strokeColor: colorBordeUrbano,
             lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
           });
         } else {
           cad.drawPolygon(paperPoints, {
-            strokeColor: colorUrbano,
+            strokeColor: colorBordeUrbano,
             lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
-            fillColor: soloBorde ? undefined : colorUrbano,
+            fillColor: soloBorde ? undefined : colorRellenoUrbano,
             noStroke: soloRelleno,
           });
         }
@@ -745,7 +753,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     drawH: number,
   ): number {
     const { UBICACION } = PLANO_THEME;
-    const CONTEXT_VISIBLE_FRACTION = 0.72;
+    const CONTEXT_VISIBLE_FRACTION = 0.15;
 
     const validCoords: [number, number][] = [...mainVertices];
     if (this.payload.contexto && this.payload.contexto.features) {
@@ -839,12 +847,17 @@ export class PlanoPerimetricoGeneratorV2Copia {
       let soloBorde = false;
       let soloRelleno = false;
       if (feature.properties.tipo !== "lote") {
-        const colorUrbano =
-          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
-        const rgb = this.hexToRgb(colorUrbano);
-        pdf.setDrawColor(rgb.r, rgb.g, rgb.b);
+        // Borde y relleno son colores independientes desde Odoo (estilo
+        // capas de AutoCAD: trazo y hatch de una capa pueden diferir).
+        const rgbBorde = this.hexToRgb(
+          feature.properties.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR,
+        );
+        const rgbRelleno = this.hexToRgb(
+          feature.properties.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR,
+        );
+        pdf.setDrawColor(rgbBorde.r, rgbBorde.g, rgbBorde.b);
         pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
-        pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+        pdf.setFillColor(rgbRelleno.r, rgbRelleno.g, rgbRelleno.b);
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color. También honra sin_relleno/
         // sin_borde configurados en Odoo (elemento.urbano.capa).
@@ -910,7 +923,10 @@ export class PlanoPerimetricoGeneratorV2Copia {
       const leaderStartY = centerLote.y + circleRadius * dirY;
       const leaderLength = Math.min(drawW, drawH) * 0.3;
 
-      const labelText = `LOTE ${this.payload.loteObjetivo.properties.identificador.lote}`;
+      const identLabel = this.payload.loteObjetivo.properties.identificador;
+      const labelText = identLabel.manzana
+        ? `LOTE ${identLabel.lote}`
+        : (identLabel.urbanizacion || 'MATRIZ').toUpperCase();
       pdf.setFontSize(6);
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
       const labelWidth = pdf.getTextWidth(labelText);
@@ -1135,7 +1151,9 @@ export class PlanoPerimetricoGeneratorV2Copia {
       (sum, l) => sum + parseFloat(l.longitudTexto),
       0,
     );
-    const loteText = `LOTE ${loteProps.identificador.lote}`;
+    const loteText = loteProps.identificador.manzana
+      ? `LOTE ${loteProps.identificador.lote}`
+      : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase();
     const areaText = `A = ${this.datosProcesados.areaFinal.toFixed(2)} m²`;
     const perimText = `P = ${perimetroVisual.toFixed(2)} ml`;
 
@@ -1412,8 +1430,8 @@ export class PlanoPerimetricoGeneratorV2Copia {
       ["Distrito", ubicacion?.distrito || "---"],
       ["Urbanización", loteProps.identificador.urbanizacion || "---"],
       ["Vía de acceso a\nurbanización", ubicacion?.direccion || "---"],
-      ["Manzana", loteProps.identificador.manzana],
-      ["Lote", loteProps.identificador.lote],
+      ["Manzana", loteProps.identificador.manzana || "---"],
+      ["Lote", loteProps.identificador.lote || "---"],
     ];
     const filaAltos = [3.2, 3.2, 3.2, 3.2, 6, 3.2, 3.2]; // mm, "Vía de acceso" ocupa 2 líneas
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);

@@ -112,7 +112,9 @@ export const loteVecinoSchema = z.object({
   // silenciosamente en este safeParse, antes de que el adaptador/generador
   // los viera. Eso hacía que el plano cayera al gris de respaldo aunque el
   // payload real (confirmado por logs) sí traía el color correcto.
-  color: z.string().optional(),
+  // "color" se reemplazó por colorBorde/colorRelleno independientes.
+  colorBorde: z.string().optional(),
+  colorRelleno: z.string().optional(),
   mostrarEtiqueta: z.boolean().optional(),
   // Mismo riesgo de strip que color/mostrarEtiqueta arriba: hay que declarar
   // cada campo nuevo acá explícitamente o zod lo descarta en silencio.

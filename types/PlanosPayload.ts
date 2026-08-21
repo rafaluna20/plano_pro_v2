@@ -181,8 +181,11 @@ export interface ContextoElementoProperties {
    */
   tipo: string;
 
-  /** Color hex de la capa (ver elemento.urbano.capa en Odoo). Ausente para tipo "lote". */
-  color?: string;
+  /** Color hex del trazo/contorno (ver elemento.urbano.capa en Odoo). Ausente para tipo "lote". */
+  colorBorde?: string;
+
+  /** Color hex del relleno — independiente de colorBorde. Ausente para tipo "lote". */
+  colorRelleno?: string;
 
   /** Si se debe imprimir "nombre"/"numeroLote" como etiqueta sobre el polígono. */
   mostrarEtiqueta?: boolean;

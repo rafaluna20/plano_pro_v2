@@ -127,8 +127,10 @@ export interface GenerarPlanosRequest {
       estado: string;
       tipo?: string;
       texto?: string;
-      /** Color hex de la capa (elemento.urbano.capa en Odoo). Dinámico, no un enum fijo. */
-      color?: string;
+      /** Color hex del trazo/contorno (elemento.urbano.capa en Odoo). Dinámico, no un enum fijo. */
+      colorBorde?: string;
+      /** Color hex del relleno — independiente de colorBorde (elemento.urbano.capa en Odoo). */
+      colorRelleno?: string;
       /** Si el nombre del elemento se imprime como etiqueta sobre el polígono. */
       mostrarEtiqueta?: boolean;
       /** Si la capa es área (polígono relleno) o línea (trazo abierto, sin relleno). Default true. */

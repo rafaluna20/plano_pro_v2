@@ -408,8 +408,12 @@ export class PlanoPerimetricoGeneratorV2 {
       if (feature.properties.circulo) {
         const [cx, cy] = utmAPapel(feature.properties.circulo.centro);
         const radioPapel = feature.properties.circulo.radio * factorEscala;
-        const colorUrbano =
-          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        // Borde y relleno son colores independientes desde Odoo (estilo
+        // capas de AutoCAD: trazo y hatch de una capa pueden diferir).
+        const colorBordeUrbano =
+          feature.properties.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        const colorRellenoUrbano =
+          feature.properties.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color — a diferencia de parques/áreas
         // verdes, que sí llevan su color de fondo. También honra el flag
@@ -419,8 +423,8 @@ export class PlanoPerimetricoGeneratorV2 {
         const soloBorde = feature.properties.tipo?.startsWith("aporte") || feature.properties.sinRelleno === true;
         const soloRelleno = feature.properties.sinBorde === true;
         cad.drawCircle(cx, cy, radioPapel, {
-          strokeColor: colorUrbano,
-          fillColor: soloBorde ? undefined : colorUrbano,
+          strokeColor: colorBordeUrbano,
+          fillColor: soloBorde ? undefined : colorRellenoUrbano,
           noStroke: soloRelleno,
           lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
         });
@@ -442,8 +446,12 @@ export class PlanoPerimetricoGeneratorV2 {
       // mostrarEtiqueta/esArea) y lotes vecinos comunes ("lote" es el único
       // tipo reservado, sin color propio).
       if (feature.properties.tipo !== "lote") {
-        const colorUrbano =
-          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        // Borde y relleno son colores independientes desde Odoo (estilo
+        // capas de AutoCAD: trazo y hatch de una capa pueden diferir).
+        const colorBordeUrbano =
+          feature.properties.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
+        const colorRellenoUrbano =
+          feature.properties.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color — a diferencia de parques/áreas
         // verdes, que sí llevan su color de fondo. También honra el flag
@@ -457,14 +465,14 @@ export class PlanoPerimetricoGeneratorV2 {
           // Línea abierta (ej. capa "líneas"): solo trazo, sin relleno,
           // sin cerrar el último punto con el primero.
           cad.drawPolyline(paperPoints, {
-            strokeColor: colorUrbano,
+            strokeColor: colorBordeUrbano,
             lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
           });
         } else {
           cad.drawPolygon(paperPoints, {
-            strokeColor: colorUrbano,
+            strokeColor: colorBordeUrbano,
             lineWidth: PLANO_THEME.STROKES.NEIGHBOR,
-            fillColor: soloBorde ? undefined : colorUrbano,
+            fillColor: soloBorde ? undefined : colorRellenoUrbano,
             noStroke: soloRelleno,
           });
         }
@@ -730,7 +738,7 @@ export class PlanoPerimetricoGeneratorV2 {
     drawH: number,
   ): number {
     const { UBICACION } = PLANO_THEME;
-    const CONTEXT_VISIBLE_FRACTION = 0.72;
+    const CONTEXT_VISIBLE_FRACTION = 0.15;
 
     const validCoords: [number, number][] = [...mainVertices];
     if (this.payload.contexto && this.payload.contexto.features) {
@@ -783,8 +791,12 @@ export class PlanoPerimetricoGeneratorV2 {
     // queda más cerrado y el lote se ve prominente; lo que sobra del
     // contexto recolectado queda fuera del recuadro (el clip de
     // drawLocationPlanAutoScale ya se encarga de recortarlo limpiamente, no
-    // hace falta filtrar antes). 0.72 = zoom extendido 20% respecto al 0.6
-    // anterior (más zoom-out, se ve más contexto alrededor del lote).
+    // hace falta filtrar antes). 0.15 = croquis a escala inmediata (~1:2000
+    // con contexto real de producción): antes en 0.72 el bbox recolectado
+    // (radio de 250m del payload) forzaba 1:10000 y el lote se veía como un
+    // punto diminuto — bajar la fracción reduce cuánto "necesita" caber el
+    // contexto recolectado en el recuadro, así se elige una escala más
+    // cerrada aunque parte de ese contexto quede fuera (recortado).
     // 2. Recolectar coordenadas para el BBox: TODOS los vecinos del payload,
     // sin filtro de radio propio. Antes había un MAX_RADIUS=70m hardcodeado
     // aquí que descartaba vecinos antes de dibujarlos, aunque el resto del
@@ -836,12 +848,17 @@ export class PlanoPerimetricoGeneratorV2 {
       let soloBorde = false;
       let soloRelleno = false;
       if (feature.properties.tipo !== "lote") {
-        const colorUrbano =
-          feature.properties.color || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR;
-        const rgb = this.hexToRgb(colorUrbano);
-        pdf.setDrawColor(rgb.r, rgb.g, rgb.b);
+        // Borde y relleno son colores independientes desde Odoo (estilo
+        // capas de AutoCAD: trazo y hatch de una capa pueden diferir).
+        const rgbBorde = this.hexToRgb(
+          feature.properties.colorBorde || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR,
+        );
+        const rgbRelleno = this.hexToRgb(
+          feature.properties.colorRelleno || PLANO_THEME.ELEMENTO_URBANO_FALLBACK_COLOR,
+        );
+        pdf.setDrawColor(rgbBorde.r, rgbBorde.g, rgbBorde.b);
         pdf.setLineWidth(UBICACION.VECINO_LINE_WIDTH);
-        pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+        pdf.setFillColor(rgbRelleno.r, rgbRelleno.g, rgbRelleno.b);
         // Los aportes (aporte_recreacion, etc.) se dibujan solo con su
         // borde, sin el relleno de color. También honra sin_relleno/
         // sin_borde configurados en Odoo (elemento.urbano.capa).
@@ -907,7 +924,12 @@ export class PlanoPerimetricoGeneratorV2 {
       const leaderStartY = centerLote.y + circleRadius * dirY;
       const leaderLength = Math.min(drawW, drawH) * 0.3;
 
-      const labelText = `LOTE ${this.payload.loteObjetivo.properties.identificador.lote}`;
+      // Sin número de lote (figura principal = matriz, no un lote vendible):
+      // usa el nombre/urbanización en vez de "LOTE " en blanco.
+      const identLabel = this.payload.loteObjetivo.properties.identificador;
+      const labelText = identLabel.manzana
+        ? `LOTE ${identLabel.lote}`
+        : (identLabel.urbanizacion || 'MATRIZ').toUpperCase();
       pdf.setFontSize(6);
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
       const labelWidth = pdf.getTextWidth(labelText);
@@ -1287,9 +1309,14 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setTextColor(0);
-    pdf.text(`LOTE ${loteProps.identificador.lote}`, center.x, center.y - 2, {
-      align: "center",
-    });
+    pdf.text(
+      loteProps.identificador.manzana
+        ? `LOTE ${loteProps.identificador.lote}`
+        : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase(),
+      center.x,
+      center.y - 2,
+      { align: "center" },
+    );
 
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
@@ -1464,12 +1491,16 @@ export class PlanoPerimetricoGeneratorV2 {
       loteProps.identificador.urbanizacion || "LEVANTAMIENTO TOPOGRÁFICO",
     );
     drawRow(1, "PROPIETARIO:", loteProps.titularidad?.nombre || "---");
+    // Sin manzana/lote (ej. la figura principal es una matriz, no un lote
+    // vendible) "Mz.  Lt. " queda en blanco y se ve roto — se usa la
+    // dirección/distrito como dato de ubicación en su lugar.
+    const ubicacionTexto = loteProps.identificador.manzana
+      ? `Mz. ${loteProps.identificador.manzana} Lt.${loteProps.identificador.lote} `
+      : loteProps.ubicacion?.direccion || loteProps.ubicacion?.distrito || "---";
     drawRow(
       2,
       "UBICACIÓN:",
-      `Mz. ${
-        loteProps.identificador.manzana
-      } Lt.${loteProps.identificador.lote} `,
+      ubicacionTexto,
     );
 
     // Área y Perímetro
