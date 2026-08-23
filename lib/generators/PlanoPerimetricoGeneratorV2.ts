@@ -398,9 +398,38 @@ export class PlanoPerimetricoGeneratorV2 {
     // Renderizar features del contexto
     this.payload.contexto.features.forEach((feature) => {
       // Las calles son contexto de referencia (para colindancias en la
-      // Memoria Descriptiva) pero no se dibujan en el plano — ni relleno ni
-      // borde. Aplica a cualquier forma (círculo o polígono/línea).
-      if (feature.properties.tipo === "calle") return;
+      // Memoria Descriptiva) — su geometría (relleno/borde) nunca se
+      // dibuja, en cualquier forma (círculo o polígono/línea). Pero si
+      // mostrarEtiqueta viene en true desde Odoo, sí se imprime el NOMBRE,
+      // centrado con calculateVisualCenter (centroide de área real,
+      // shoelace) — igual que cualquier otro elemento urbano. Importa
+      // porque una calle suele venir digitalizada como anillo cerrado
+      // (borde de ida + borde de vuelta, no un solo eje): un centro por
+      // longitud recorrida caería sobre uno de los dos bordes, pero el
+      // centroide de ÁREA cae adentro del anillo — correcto sin necesitar
+      // ningún caso especial para el anillo cerrado.
+      if (feature.properties.tipo === "calle") {
+        if (feature.properties.mostrarEtiqueta !== false && feature.properties.nombre) {
+          let centerCalle: [number, number] | null = null;
+          if (feature.properties.circulo) {
+            centerCalle = utmAPapel(feature.properties.circulo.centro);
+          } else if (feature.geometry.type === "Polygon") {
+            const paperPointsCalle = (
+              feature.geometry.coordinates[0] as [number, number][]
+            ).map(utmAPapel);
+            const c = this.calculateVisualCenter(paperPointsCalle);
+            centerCalle = [c.x, c.y];
+          }
+          if (centerCalle) {
+            pdf.setTextColor(parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16));
+            pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+            pdf.text(feature.properties.nombre, centerCalle[0], centerCalle[1], {
+              align: "center",
+            });
+          }
+        }
+        return;
+      }
 
       // Elemento circular completo (glorieta, plaza redonda, reservorio):
       // se dibuja como círculo real, no como el polígono-diamante que trae
