@@ -43,11 +43,21 @@ export const colindanciaSchema = z.object({
 });
 
 // Dimensiones
+// fondo/ladoDerecho/ladoIzquierdo aceptan 0: el clasificador de lados en
+// mapa_renasur (derivarColindanciasYDimensiones) asume un lote más o menos
+// cuadrangular con esos 4 lados — un predio/matriz sin subdividir con un
+// perímetro muy irregular (muchos vértices, sin las 4 caras clásicas) puede
+// legítimamente no tener ningún tramo clasificado como "izquierda", por
+// ejemplo. El detalle real lado-por-lado ya viaja completo en
+// `colindancias`; estos 4 escalares son solo un resumen, no se usan para
+// dibujar el plano (ver MemoriaDescriptiva.ts/PlanoUbicacion.ts, que solo
+// leen area/perimetro). `frente` se mantiene positive(): el algoritmo
+// siempre le asigna la arista más larga del polígono, nunca puede dar 0.
 export const dimensionesSchema = z.object({
   frente: z.number().positive(),
-  fondo: z.number().positive(),
-  ladoDerecho: z.number().positive(),
-  ladoIzquierdo: z.number().positive(),
+  fondo: z.number().nonnegative(),
+  ladoDerecho: z.number().nonnegative(),
+  ladoIzquierdo: z.number().nonnegative(),
   area: z.number().positive(),
   perimetro: z.number().positive(),
 });
