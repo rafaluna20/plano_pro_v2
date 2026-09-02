@@ -128,29 +128,47 @@ export function parseGeoJSON(content: string): ImportResult {
 }
 
 /**
+ * El spec de GeoJSON exige que un anillo (Polygon) esté cerrado: el primer y
+ * último punto deben ser idénticos. El editor, en cambio, modela el
+ * polígono como un anillo abierto en todos lados (INITIAL_DATA, el cálculo
+ * de área/perímetro con wraparound `(i+1) % n`, el <polygon> SVG que cierra
+ * la forma solo). Sin este ajuste, cualquier GeoJSON válido importa un
+ * vértice final duplicado: crea un lado de longitud cero y, en la
+ * generación del PDF, una dirección de lado indefinida (dx=dy=0) que puede
+ * producir NaN/Infinity en cálculos que dependen de esa dirección.
+ */
+function dropClosingDuplicate(coords: number[][]): number[][] {
+  if (coords.length < 2) return coords;
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  const isClosed = Math.abs(first[0] - last[0]) < 1e-6 && Math.abs(first[1] - last[1]) < 1e-6;
+  return isClosed ? coords.slice(0, -1) : coords;
+}
+
+/**
  * Extrae coordenadas de una geometría GeoJSON
  */
 function extractCoordinatesFromGeometry(geometry: any): number[][] {
   switch (geometry.type) {
     case 'Point':
       return [geometry.coordinates];
-    
+
     case 'MultiPoint':
     case 'LineString':
       return geometry.coordinates;
-    
+
     case 'Polygon':
-      // Tomar el anillo exterior (primer array)
-      return geometry.coordinates[0];
-    
+      // Tomar el anillo exterior (primer array), sin el punto de cierre duplicado
+      return dropClosingDuplicate(geometry.coordinates[0]);
+
     case 'MultiLineString':
       // Tomar la primera línea
       return geometry.coordinates[0];
-    
+
     case 'MultiPolygon':
-      // Tomar el primer polígono, anillo exterior
-      return geometry.coordinates[0][0];
-    
+      // Tomar el primer polígono, anillo exterior, sin el punto de cierre duplicado
+      return dropClosingDuplicate(geometry.coordinates[0][0]);
+
     default:
       return [];
   }
@@ -218,17 +236,21 @@ export function parseKML(content: string): ImportResult {
       // Por ahora, asumir que ya son coordenadas proyectadas
       vertices.push([lon, lat]);
     }
-    
-    if (vertices.length < 3) {
+
+    // Un <Polygon> KML repite el primer punto al final para cerrar el
+    // anillo (mismo motivo que en parseGeoJSON): el editor lo modela abierto.
+    const dedupedVertices = dropClosingDuplicate(vertices) as UTMCoordinate[];
+
+    if (dedupedVertices.length < 3) {
       return {
         success: false,
         error: 'Se requieren al menos 3 vértices para formar un polígono'
       };
     }
-    
+
     return {
       success: true,
-      vertices
+      vertices: dedupedVertices
     };
   } catch (error) {
     return {

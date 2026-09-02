@@ -840,9 +840,42 @@ export default function EditorPlanos() {
         h: rect1.h,
       };
 
+      // Los lotes adyacentes (N/S/E/O) son datos de otro contexto (demo o de
+      // un lote previo) hasta que el usuario los edita a mano. Si el lote
+      // principal se reemplaza (ej. importando un JSON con vértices de otra
+      // ubicación) sin tocar los adyacentes, estos quedan a kilómetros de
+      // distancia: al entrar sin filtrar al cálculo del bbox, el encuadre se
+      // estira para abarcar ambos y el lote real se ve como un punto
+      // invisible. Se descartan los que estén demasiado lejos del lote
+      // principal, tanto para el encuadre como para el dibujo.
+      const mainXValues = vertices.map((v) => v.x);
+      const mainYValues = vertices.map((v) => v.y);
+      const mainMinX = Math.min(...mainXValues);
+      const mainMaxX = Math.max(...mainXValues);
+      const mainMinY = Math.min(...mainYValues);
+      const mainMaxY = Math.max(...mainYValues);
+      const mainCenterX = (mainMinX + mainMaxX) / 2;
+      const mainCenterY = (mainMinY + mainMaxY) / 2;
+      const mainSpan = Math.max(mainMaxX - mainMinX, mainMaxY - mainMinY, 1);
+      const proximityThreshold = mainSpan * 3;
+
+      const nearbyLotesAdyacentes = Object.fromEntries(
+        Object.entries(data.lotesAdyacentes || {}).filter(([, info]) => {
+          if (!info || !info.vertices || info.vertices.length === 0) return false;
+          const cx =
+            info.vertices.reduce((sum, v) => sum + v.x, 0) / info.vertices.length;
+          const cy =
+            info.vertices.reduce((sum, v) => sum + v.y, 0) / info.vertices.length;
+          const dist = Math.sqrt(
+            Math.pow(cx - mainCenterX, 2) + Math.pow(cy - mainCenterY, 2),
+          );
+          return dist <= proximityThreshold;
+        }),
+      ) as typeof data.lotesAdyacentes;
+
       const allVertices = [
         ...vertices,
-        ...Object.values(data.lotesAdyacentes || {}).flatMap(
+        ...Object.values(nearbyLotesAdyacentes || {}).flatMap(
           (info) => info?.vertices || [],
         ),
       ];
@@ -1055,7 +1088,7 @@ export default function EditorPlanos() {
       const membreteH = 110;
       const membreteY = rect3.y + rect3.h - membreteH;
 
-      const adyacentes = Object.entries(data.lotesAdyacentes || {})
+      const adyacentes = Object.entries(nearbyLotesAdyacentes || {})
         .map(([key, info]) => {
           if (!info || !info.vertices) return null;
           const pts = info.vertices.map((v) => toScreen(v.x, v.y));
