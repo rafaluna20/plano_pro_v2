@@ -102,6 +102,87 @@ export function calculateDistance(p1: UTMCoordinate, p2: UTMCoordinate): number 
 }
 
 /**
+ * Punto sobre una polilínea a una fracción dada de su longitud RECORRIDA
+ * (0 = inicio, 1 = fin, 0.5 = punto medio por longitud — no por índice de
+ * vértice, que da resultados incorrectos si los tramos tienen largos muy
+ * distintos).
+ */
+export function calcularPuntoEnRuta(coordinates: UTMCoordinate[], fraccion: number): UTMCoordinate {
+  if (coordinates.length === 0) return [0, 0];
+  if (coordinates.length === 1) return coordinates[0];
+
+  const segLengths: number[] = [];
+  let total = 0;
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const d = calculateDistance(coordinates[i], coordinates[i + 1]);
+    segLengths.push(d);
+    total += d;
+  }
+  if (total === 0) return coordinates[0];
+
+  const objetivo = total * Math.min(1, Math.max(0, fraccion));
+  let acumulado = 0;
+  for (let i = 0; i < segLengths.length; i++) {
+    const d = segLengths[i];
+    if (acumulado + d >= objetivo || i === segLengths.length - 1) {
+      const t = d === 0 ? 0 : (objetivo - acumulado) / d;
+      const [x1, y1] = coordinates[i];
+      const [x2, y2] = coordinates[i + 1];
+      return [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t];
+    }
+    acumulado += d;
+  }
+  return coordinates[coordinates.length - 1];
+}
+
+/**
+ * Centro real de una calle digitalizada como polígono/anillo cerrado
+ * (borde de "ida" por un costado + borde de "vuelta" por el otro, no un
+ * solo eje) — el centroide de área (shoelace, ver calculateCentroid) de
+ * ese anillo puede caer fuera del trazado real de la calle en tramos
+ * curvos o en forma de L/esquina, porque promedia toda el área encerrada
+ * en vez de seguir la vía. Mismo problema y misma técnica ya resuelta en
+ * mapa_renasur (derivarLineaCentralDeRutaCerrada/geometryUtils.ts) para
+ * el centrado de etiquetas de calle en el mapa.
+ *
+ * Técnica: recorrer el anillo desde el inicio ("ida", 0%→50% de la
+ * longitud total) y desde el final hacia atrás ("vuelta", 100%→50%) en
+ * paralelo, muestreando por longitud recorrida (no por índice de vértice
+ * — robusto aunque los dos bordes tengan densidades de puntos distintas)
+ * y promediando cada par de puntos opuestos para reconstruir el eje
+ * central real; el punto medio de ese eje (fracción 0.5) es el centro de
+ * la calle. En los extremos (0%/100%, donde ambos bordes casi se tocan) y
+ * en la punta (50%, el punto de retorno del anillo) el promedio colapsa
+ * naturalmente al punto correcto.
+ *
+ * Si la geometría no llega como anillo cerrado (calle digitalizada como
+ * un solo eje/línea, caso atípico), se usa directamente su punto medio
+ * por longitud, sin promediado — mismo comportamiento de respaldo que
+ * mapa_renasur.
+ */
+export function calcularCentroDeCalle(coordinates: UTMCoordinate[]): UTMCoordinate {
+  if (coordinates.length < 2) return coordinates[0] ?? [0, 0];
+
+  const esAnilloCerrado =
+    coordinates.length >= 4 &&
+    calculateDistance(coordinates[0], coordinates[coordinates.length - 1]) < 0.5;
+
+  if (!esAnilloCerrado) {
+    return calcularPuntoEnRuta(coordinates, 0.5);
+  }
+
+  const muestras = 15;
+  const central: UTMCoordinate[] = [];
+  for (let i = 0; i < muestras; i++) {
+    const t = i / (muestras - 1);
+    const ida = calcularPuntoEnRuta(coordinates, t * 0.5);
+    const vuelta = calcularPuntoEnRuta(coordinates, 1 - t * 0.5);
+    central.push([(ida[0] + vuelta[0]) / 2, (ida[1] + vuelta[1]) / 2]);
+  }
+  return calcularPuntoEnRuta(central, 0.5);
+}
+
+/**
  * Calcula el ángulo de un segmento (en grados)
  */
 export function calculateBearing(p1: UTMCoordinate, p2: UTMCoordinate): number {

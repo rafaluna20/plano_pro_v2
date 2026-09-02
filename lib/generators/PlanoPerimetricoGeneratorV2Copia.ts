@@ -29,6 +29,7 @@ import {
   calculateCentroid,
   utmToLatLng,
   calculateInteriorAngles,
+  calcularCentroDeCalle,
   DEFAULT_UTM_ZONE,
   toDMS,
 } from "@/lib/geometry/utmUtils";
@@ -414,29 +415,26 @@ export class PlanoPerimetricoGeneratorV2Copia {
       // Las calles son contexto de referencia (para colindancias en la
       // Memoria Descriptiva) — su geometría (relleno/borde) nunca se
       // dibuja, en cualquier forma (círculo o polígono/línea). Pero si
-      // mostrarEtiqueta viene en true desde Odoo, sí se imprime el NOMBRE,
-      // centrado con calculateVisualCenter (centroide de área real,
-      // shoelace) — igual que cualquier otro elemento urbano. Importa
-      // porque una calle suele venir digitalizada como anillo cerrado
-      // (borde de ida + borde de vuelta, no un solo eje): un centro por
-      // longitud recorrida caería sobre uno de los dos bordes, pero el
-      // centroide de ÁREA cae adentro del anillo — correcto sin necesitar
-      // ningún caso especial para el anillo cerrado.
+      // mostrarEtiqueta viene en true desde Odoo, sí se imprime el NOMBRE.
+      // Una calle suele venir digitalizada como anillo cerrado (borde de
+      // ida + borde de vuelta, no un solo eje): el centroide de ÁREA
+      // (shoelace) de ese anillo puede caer fuera del trazado real en
+      // tramos curvos o en forma de L/esquina, porque promedia toda el
+      // área encerrada en vez de seguir la vía — por eso se usa
+      // calcularCentroDeCalle (promedio de ida/vuelta por longitud
+      // recorrida, ver utmUtils.ts), no calculateVisualCenter.
       if (feature.properties.tipo === "calle") {
         if (feature.properties.mostrarEtiqueta !== false && feature.properties.nombre) {
           let centerCalle: [number, number] | null = null;
           if (feature.properties.circulo) {
             centerCalle = utmAPapel(feature.properties.circulo.centro);
           } else if (feature.geometry.type === "Polygon") {
-            const paperPointsCalle = (
-              feature.geometry.coordinates[0] as [number, number][]
-            ).map(utmAPapel);
-            const c = this.calculateVisualCenter(paperPointsCalle);
-            centerCalle = [c.x, c.y];
+            const coordsCalleUtm = feature.geometry.coordinates[0] as [number, number][];
+            centerCalle = utmAPapel(calcularCentroDeCalle(coordsCalleUtm));
           }
           if (centerCalle) {
             pdf.setTextColor(parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16));
-            pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+            pdf.setFontSize(PLANO_THEME.FONTS.SIZES.CONTEXT_LABEL);
             pdf.text(feature.properties.nombre, centerCalle[0], centerCalle[1], {
               align: "center",
             });
@@ -473,7 +471,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
         });
         if (feature.properties.mostrarEtiqueta !== false && feature.properties.numeroLote) {
           pdf.setTextColor(parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16));
-          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.CONTEXT_LABEL);
           pdf.text(feature.properties.numeroLote, cx, cy, { align: "center" });
         }
         return;
@@ -523,7 +521,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
           pdf.setTextColor(
             parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16),
           );
-          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.CONTEXT_LABEL);
           pdf.text(feature.properties.numeroLote, center.x, center.y, {
             align: "center",
           });
@@ -541,7 +539,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
           pdf.setTextColor(
             parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16),
           );
-          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+          pdf.setFontSize(PLANO_THEME.FONTS.SIZES.CONTEXT_LABEL);
           pdf.text(feature.properties.numeroLote, center.x, center.y, {
             align: "center",
           });
@@ -1270,7 +1268,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // de la línea cae el interior, no para geometría de precisión.
     const centroidEtiquetas = this.calculateVisualCenter(paperPoints);
     const INWARD_LABEL_OFFSET = 3; // mm hacia adentro del lote
-    const SIDE_LABEL_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.7; // +70% a pedido
+    const SIDE_LABEL_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.7 * 0.8; // +70% a pedido, luego -20% a pedido
 
     this.datosProcesados.linderosFinal.forEach(
       (lindero: LinderoRegistral, i: number) => {
@@ -1601,7 +1599,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
     pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
     const grayVal = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
     pdf.setDrawColor(grayVal);
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.CONTEXT_LABEL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
 
     // Líneas Verticales (etiqueta ESTE en ambos extremos: abajo y arriba)

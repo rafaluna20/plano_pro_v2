@@ -73,8 +73,12 @@ export const PLANO_THEME = {
 
     // Elementos de interfaz
     ACCENT_LINE: '#CCCCCC',       // Líneas de grilla o separadores
-    GRID_LINE: '#969696',         // Líneas de grilla UTM (gris medio)
-    NEIGHBOR_STROKE: '#AAAAAA',   // Bordes de lotes vecinos
+    // Oscurecidos respecto al gris original (#969696/#AAAAAA): a ese nivel
+    // de gris, la grilla UTM y los bordes de vecinos/elementos de contexto
+    // se perdían casi por completo al imprimir en A4 (el gris claro pierde
+    // aún más contraste al pasar por rasterizado/impresión que en pantalla).
+    GRID_LINE: '#707070',         // Líneas de grilla UTM (gris medio-oscuro, legible impreso)
+    NEIGHBOR_STROKE: '#808080',   // Bordes de lotes vecinos
 
     // Colores especiales
     WHITE: '#FFFFFF',
@@ -103,8 +107,12 @@ export const PLANO_THEME = {
     FRAME_OUTER: 0.8,        // Marco externo del papel
     FRAME_INNER: 0.3,        // Marcos de tablas y cajas
     DATA_LINES: 0.2,         // Líneas de dibujo técnico general
-    GRID: 0.1,               // Grilla de fondo (muy fina)
-    NEIGHBOR: 0.1,           // Bordes de lotes vecinos
+    // +20% sobre el valor original (0.1mm): a 0.1mm la grilla UTM y los
+    // bordes de vecinos/elementos de contexto no se distinguían bien al
+    // imprimir en A4 (línea demasiado fina para la resolución real de
+    // impresión, aunque se viera aceptable en pantalla).
+    GRID: 0.12,              // Grilla de fondo (antes 0.1)
+    NEIGHBOR: 0.12,          // Bordes de lotes vecinos y elementos de contexto (antes 0.1)
     HAIRLINE: 0.05,          // Tramas o detalles mínimos
     SEPARATOR: 0.5,          // Separadores visuales destacados
     NORTH_ARROW: 0.3         // Flecha de norte
@@ -122,7 +130,12 @@ export const PLANO_THEME = {
       H3: 10,       // Títulos de sección
       BODY: 8,      // Texto estándar (datos en membrete)
       LABEL: 7,     // Etiquetas de campos
-      SMALL: 6,     // Cotas, detalles, coordenadas
+      SMALL: 6,     // Detalles, coordenadas (lote principal)
+      // +20% sobre SMALL: etiquetas de la grilla UTM (coordenadas Este/Norte)
+      // y de lotes vecinos/elementos de contexto — a tamaño SMALL quedaban
+      // casi ilegibles al imprimir en A4. No afecta las cotas/vértices del
+      // lote principal, que ya se ven bien por ser el elemento protagonista.
+      CONTEXT_LABEL: 7.2,
       TINY: 5       // Notas legales o coordenadas muy densas
     },
 
