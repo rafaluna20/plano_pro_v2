@@ -142,8 +142,14 @@ export default function ProfessionalEditorPage() {
             return;
         }
 
+        const apiKey = localStorage.getItem('apiKey');
+        if (!apiKey) {
+            toast.error('No se encontró tu API key. Vuelve a iniciar sesión o regístrate para obtener una.');
+            return;
+        }
+
         setIsSubmitting(true);
-        
+
         try {
             const requestData: GenerarPlanosRequest = {
                 vertices,
@@ -171,7 +177,7 @@ export default function ProfessionalEditorPage() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-API-Key': 'plpro_development_key'
+                    'X-API-Key': apiKey
                 },
                 body: JSON.stringify(requestData)
             });

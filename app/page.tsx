@@ -1400,6 +1400,11 @@ export default function EditorPlanos() {
       return;
     }
 
+    if (!token) {
+      toast.error("Debes iniciar sesión para generar el PDF");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -1594,6 +1599,7 @@ export default function EditorPlanos() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify(hybridPayload),
       });

@@ -18,6 +18,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [connectingApi, setConnectingApi] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     completed: 0,
@@ -29,12 +31,47 @@ export default function DashboardPage() {
     fetchPlanos();
   }, []);
 
+  // Obtiene una API key nueva usando la sesión JWT ya activa. Necesario
+  // porque /auth/login no puede devolver la key real (se guarda hasheada en
+  // BD); solo se conoce en texto plano una vez, al registrarse o al llamar
+  // aquí. Sin esto, cualquier usuario que limpie localStorage o entre desde
+  // otro dispositivo queda atascado en modo demo para siempre.
+  const handleConnectApi = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.push('/auth/login');
+      return;
+    }
+
+    setConnectingApi(true);
+    try {
+      const response = await fetch('/api/v1/auth/api-key', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        localStorage.setItem('apiKey', data.data.apiKey);
+        await fetchPlanos();
+      } else {
+        alert(data.error?.message || 'No se pudo conectar con la API');
+      }
+    } catch (error) {
+      console.error('Error conectando con la API:', error);
+      alert('Ocurrió un error al conectar con la API.');
+    } finally {
+      setConnectingApi(false);
+    }
+  };
+
   const fetchPlanos = async () => {
     try {
       const apiKey = localStorage.getItem('apiKey');
 
       // Si no hay API key, usar datos de ejemplo (modo demo)
       if (!apiKey) {
+        setIsDemoMode(true);
         const planosEjemplo: Plano[] = [
           {
             id: 'demo-1',
@@ -73,6 +110,7 @@ export default function DashboardPage() {
       const data = await response.json();
 
       if (data.success) {
+        setIsDemoMode(false);
         setPlanos(data.data);
 
         // Calcular stats
@@ -86,6 +124,11 @@ export default function DashboardPage() {
           pending,
           failed
         });
+      } else if (response.status === 401) {
+        // La API key guardada ya no es válida (revocada, expirada o de una
+        // sesión anterior): tratar como si no hubiera key y ofrecer reconectar.
+        localStorage.removeItem('apiKey');
+        setIsDemoMode(true);
       }
     } catch (error) {
       console.error('Error fetching planos:', error);
@@ -149,6 +192,21 @@ export default function DashboardPage() {
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {isDemoMode && !loading && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-sm text-amber-800">
+                Estás viendo <strong>datos de ejemplo</strong>. No se encontró una API key válida en este dispositivo.
+              </p>
+              <button
+                onClick={handleConnectApi}
+                disabled={connectingApi}
+                className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {connectingApi ? 'Conectando...' : 'Conectar con la API'}
+              </button>
+            </div>
+          )}
+
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-lg shadow p-6">

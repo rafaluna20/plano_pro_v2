@@ -41,10 +41,27 @@ export default function LoginPage() {
       if (data.success) {
         // Guardar token y API key en localStorage
         localStorage.setItem('token', data.data.token);
+        localStorage.setItem('user', JSON.stringify(data.data.user));
+
         if (data.data.apiKey) {
           localStorage.setItem('apiKey', data.data.apiKey);
+        } else {
+          // El login nunca devuelve la key en texto plano (se guarda hasheada
+          // en BD): la pedimos aparte con la sesión recién obtenida para que
+          // el dashboard/editor no queden atascados en modo demo.
+          try {
+            const keyResponse = await fetch('/api/v1/auth/api-key', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${data.data.token}` }
+            });
+            const keyData = await keyResponse.json();
+            if (keyData.success) {
+              localStorage.setItem('apiKey', keyData.data.apiKey);
+            }
+          } catch (keyErr) {
+            console.error('Error obteniendo API key:', keyErr);
+          }
         }
-        localStorage.setItem('user', JSON.stringify(data.data.user));
 
         // Redirigir al dashboard
         router.push('/dashboard');
