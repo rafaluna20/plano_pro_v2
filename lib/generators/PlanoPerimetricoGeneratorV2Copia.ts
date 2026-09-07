@@ -1267,8 +1267,8 @@ export class PlanoPerimetricoGeneratorV2Copia {
     // Centroide (aprox.) del lote: sirve solo para decidir hacia qué lado
     // de la línea cae el interior, no para geometría de precisión.
     const centroidEtiquetas = this.calculateVisualCenter(paperPoints);
-    const INWARD_LABEL_OFFSET = 3; // mm hacia adentro del lote
-    const SIDE_LABEL_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.7 * 0.8; // +70% a pedido, luego -20% a pedido
+    const INWARD_LABEL_OFFSET = 3 * 0.8; // mm hacia adentro del lote (-20% a pedido)
+    const SIDE_LABEL_FONT = PLANO_THEME.FONTS.SIZES.SMALL * 1.7 * 0.8 * 0.9; // +70%, luego -20%, luego -10% (todo a pedido)
 
     this.datosProcesados.linderosFinal.forEach(
       (lindero: LinderoRegistral, i: number) => {
@@ -1814,8 +1814,12 @@ export class PlanoPerimetricoGeneratorV2Copia {
     const ZOOM_OUT_PADDING = 1.15 * 1.3 * 1.9;
     const raw = Math.max(scaleX, scaleY) * ZOOM_OUT_PADDING;
 
+    // 300 agregado a pedido: el salto 250->500 (el único hueco grande de la
+    // lista) hacía que dos lotes de tamaño físico muy parecido, apenas a
+    // uno y otro lado del corte de 250, terminaran con escalas al doble una
+    // de la otra. Solo afecta a esta copia.
     const scales = [
-      50, 75, 100, 125, 200, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000,
+      50, 75, 100, 125, 200, 250, 300, 500, 750, 1000, 1250, 1500, 2000, 2500, 5000,
     ];
     const final = scales.find((s) => s >= raw) || Math.ceil(raw / 100) * 100;
 
