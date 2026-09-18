@@ -424,21 +424,25 @@ export class MemoriaDescriptivaGenerator {
     const pageWidth = pdf.internal.pageSize.width;
     const pageHeight = pdf.internal.pageSize.height;
     const footerY = pageHeight - 40;
-    
-    // Línea de firma
-    const centerX = pageWidth / 2;
-    
-    pdf.setDrawColor(0);
-    pdf.setLineWidth(0.5);
-    pdf.line(centerX - 40, footerY, centerX + 40, footerY);
-    
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('PROFESIONAL RESPONSABLE', centerX, footerY + 5, { align: 'center' });
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(8);
-    pdf.text('Ingeniero Civil / Arquitecto', centerX, footerY + 10, { align: 'center' });
-    
+
+    // Línea de firma del profesional responsable: solo en la memoria
+    // completa. El documento resumen (EXTRACTO) no lleva esta firma —
+    // no es el documento íntegro/oficial, a pedido del usuario.
+    if (!this.config.soloSeccionLinderosEnMemoria) {
+      const centerX = pageWidth / 2;
+
+      pdf.setDrawColor(0);
+      pdf.setLineWidth(0.5);
+      pdf.line(centerX - 40, footerY, centerX + 40, footerY);
+
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('PROFESIONAL RESPONSABLE', centerX, footerY + 5, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.text('Ingeniero Civil / Arquitecto', centerX, footerY + 10, { align: 'center' });
+    }
+
     // Hash de seguridad
     pdf.setFontSize(6);
     pdf.setTextColor(150);
