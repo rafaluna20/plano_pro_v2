@@ -3,6 +3,7 @@ import { GenerarPlanosRequest, PlanoConfig } from '@/types/planos';
 import { DatosProcesados } from '@/lib/services/PlanoDataProcessor';
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
 import { drawCoordinatesTechnicalTable } from './CoordinatesTable';
+import { fraseColindancia } from './linderoTexto';
 
 /**
  * Generador de Memoria Descriptiva - Proyecto Terra Lima
@@ -238,7 +239,6 @@ export class MemoriaDescriptivaGenerator {
         }
 
         const longitud = col.longitud ? col.longitud.toFixed(2) : '0.00';
-        const nombre = col.nombre || '---';
 
         // Lindero curvo (ver x_geometry_arcos en Odoo / product_lot_geometry):
         // se redacta como arco de circunferencia (radio + longitud de arco),
@@ -248,14 +248,9 @@ export class MemoriaDescriptivaGenerator {
           ? `con un arco de circunferencia de radio ${col.radio!.toFixed(2)} ml y una longitud de arco de ${col.longitudArco!.toFixed(2)} ml.`
           : `con una línea recta de ${longitud} ml.`;
 
-        // Lógica de redacción según tipo
-        let descripcion: string;
-        if (col.tipo?.toLowerCase() === 'calle' || col.tipo?.toLowerCase() === 'via' || col.tipo?.toLowerCase() === 'av') {
-          descripcion = `Colinda con ${col.tipo} "${nombre}", ${terminacion}`;
-        } else {
-          const propInfo = col.propietario ? `, propiedad de ${col.propietario}` : '';
-          descripcion = `Colinda con el ${col.tipo} "${nombre}"${propInfo}, ${terminacion}`;
-        }
+        // Redacción según tipo (calle sin artículo; el resto con el nombre
+        // legible de la capa, no su código interno — ver linderoTexto.ts)
+        const descripcion = `${fraseColindancia(col)}, ${terminacion}`;
 
         // Viñeta indentada bajo el encabezado del lado
         pdf.setFont('helvetica', 'normal');
