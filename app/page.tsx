@@ -37,6 +37,7 @@ import { Toaster, toast } from "react-hot-toast";
 import { UTMCoordinate } from "@/types/planos";
 import { getUtmProjString, DEFAULT_UTM_ZONE } from "@/lib/geometry/utmUtils";
 import { authFetch } from "@/lib/auth/authFetch";
+import { construirPayloadExpediente } from "@/lib/editor/expedientePayload";
 
 const LocationMap = dynamic(() => import("@/components/editor/LocationMap"), {
   ssr: false,
@@ -1285,6 +1286,166 @@ export default function EditorPlanos() {
     }
   };
 
+  /**
+   * API key de la cuenta para las rutas que no aceptan el JWT (/generar y la
+   * consulta de estado). El login la guarda en localStorage; si falta (otro
+   * navegador, storage limpiado) se emite una nueva con la sesión JWT.
+   */
+  const obtenerApiKey = async (forzarNueva = false): Promise<string | null> => {
+    if (!forzarNueva) {
+      const guardada = localStorage.getItem("apiKey");
+      if (guardada) return guardada;
+    }
+    const r = await authFetch(
+      "/api/v1/auth/api-key",
+      { method: "POST" },
+      { redirectOnUnauthorized: false },
+    );
+    if (r.status === 401) return null;
+    const j = await r.json().catch(() => null);
+    if (j?.success && j.data?.apiKey) {
+      localStorage.setItem("apiKey", j.data.apiKey);
+      return j.data.apiKey as string;
+    }
+    return null;
+  };
+
+  /** fetch con x-api-key; si la clave guardada ya no vale, reintenta con una nueva. */
+  const fetchConApiKey = async (url: string, init: RequestInit = {}) => {
+    let key = await obtenerApiKey();
+    if (!key) return null;
+    const llamar = (k: string) =>
+      fetch(url, {
+        ...init,
+        headers: { ...(init.headers || {}), "x-api-key": k },
+      });
+    let res = await llamar(key);
+    if (res.status === 401) {
+      key = await obtenerApiKey(true);
+      if (!key) return null;
+      res = await llamar(key);
+    }
+    return res;
+  };
+
+  /**
+   * "Expediente completo": memoria descriptiva + plano de ubicación + plano
+   * perimétrico, por la misma ruta (/api/v1/planos/generar) que usa
+   * mapa_renasur. Es asíncrona: el servidor encola el trabajo y un worker lo
+   * procesa, así que se consulta el estado hasta que termine.
+   */
+  const handleGenerateExpediente = async () => {
+    if (!token) {
+      toast.error("Debes iniciar sesión para generar el expediente");
+      return;
+    }
+    if (!validarAntesDeExportar()) return;
+
+    const construido = construirPayloadExpediente({
+      loteId: data.loteId,
+      propietario: data.propietario,
+      titularDoc: data.titularDoc,
+      ubicacion: data.ubicacion,
+      proyecto: data.membrete.proyecto,
+      vertices: data.vertices,
+      vecinos: data.contexto.vecinos,
+      adyacentes: data.lotesAdyacentes as any,
+    });
+    if (!construido.ok) {
+      setActiveTab("general");
+      toast.error(
+        `No se puede generar el expediente:\n• ${construido.errores.join("\n• ")}`,
+        { duration: 9000, style: { whiteSpace: "pre-line" } },
+      );
+      return;
+    }
+    construido.advertencias.forEach((a) =>
+      toast(a, { icon: "⚠️", duration: 9000 }),
+    );
+
+    setLoading(true);
+    const idToast = toast.loading("Enviando expediente al servidor...");
+    try {
+      const resp = await fetchConApiKey("/api/v1/planos/generar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(construido.payload),
+      });
+      if (!resp) {
+        toast.error(SESION_VENCIDA_MSG, { id: idToast, duration: 12000 });
+        return;
+      }
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json?.success) {
+        toast.error(
+          json?.error?.message
+            ? `${json.error.message}${json.error.details ? ` (${JSON.stringify(json.error.details).slice(0, 200)})` : ""}`
+            : `El servidor rechazó el expediente (HTTP ${resp.status})`,
+          { id: idToast, duration: 12000 },
+        );
+        return;
+      }
+
+      const planoId: string = json.data.planoId;
+      toast.loading("Generando memoria descriptiva y planos...", { id: idToast });
+
+      // Esperar al worker: hasta ~3 minutos, consultando cada 3 s.
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const est = await fetchConApiKey(`/api/v1/planos/${planoId}`);
+        const ej = await est?.json().catch(() => null);
+        if (!ej?.success) continue; // error transitorio: seguir intentando
+        const { status, pdfUrl, dxfUrl, errorMessage } = ej.data;
+        if (status === "COMPLETED" && pdfUrl) {
+          toast.success(
+            <span>
+              Expediente listo.{" "}
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-semibold"
+              >
+                Abrir PDF
+              </a>
+              {dxfUrl && (
+                <>
+                  {" · "}
+                  <a
+                    href={dxfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-semibold"
+                  >
+                    DXF
+                  </a>
+                </>
+              )}
+            </span>,
+            { id: idToast, duration: 60000 },
+          );
+          return;
+        }
+        if (status === "FAILED") {
+          toast.error(
+            `Falló la generación: ${errorMessage || "sin detalle del servidor"}`,
+            { id: idToast, duration: 12000 },
+          );
+          return;
+        }
+      }
+      toast.error(
+        "El servidor no terminó en 3 minutos. Puede que el proceso de generación (worker) esté detenido o saturado; el pedido quedó registrado en el dashboard.",
+        { id: idToast, duration: 15000 },
+      );
+    } catch (error) {
+      console.error("❌ Error al generar el expediente:", error);
+      toast.error("Error al conectar con el servidor", { id: idToast });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGeneratePDF = async () => {
     if (data.vertices.length < 3) {
       toast.error("Se requieren al menos 3 vértices para generar el PDF");
@@ -1609,9 +1770,19 @@ export default function EditorPlanos() {
               )}
             </button>
             <button
+              onClick={handleGenerateExpediente}
+              disabled={loading}
+              title="Memoria descriptiva + plano de ubicación + plano perimétrico (el mismo expediente que genera mapa_renasur)"
+              className="px-4 py-2 whitespace-nowrap text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-md flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <FileText size={18} />
+              Expediente completo
+            </button>
+            <button
               onClick={handlePrintPDF}
               disabled={loading}
-              className="px-6 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+              title="Solo el plano perimétrico (motor react-pdf)"
+              className="px-4 py-2 whitespace-nowrap text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <Download size={18} className="text-blue-600" />
               Impresión API
@@ -1619,7 +1790,8 @@ export default function EditorPlanos() {
             <button
               onClick={handleGeneratePDF}
               disabled={loading}
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-800 hover:bg-blue-900 rounded-lg shadow-md flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+              title="Solo el plano perimétrico A3 (motor V2)"
+              className="px-4 py-2 whitespace-nowrap text-sm font-medium text-white bg-blue-800 hover:bg-blue-900 rounded-lg shadow-md flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
