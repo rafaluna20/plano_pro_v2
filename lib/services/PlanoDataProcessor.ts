@@ -11,6 +11,7 @@
  */
 
 import * as turf from '@turf/turf';
+import { parecenGrados, areaPlanaM2, perimetroPlanoM } from '@/lib/geometry/planarMetrics';
 import { calculateInteriorAngles } from '@/lib/geometry/utmUtils';
 import type {
   PlanoPayloadHibrido,
@@ -218,9 +219,19 @@ export class PlanoDataProcessor {
     // Área y perímetro SÍ deben usar la geometría expandida (con los puntos
     // muestreados de cada arco): es la que da el área/perímetro real de la
     // curva, no de la cuerda recta entre sus 2 extremos.
+    // turf.polygon valida que el anillo sea cerrado y tenga >= 4 posiciones (se
+    // conserva: un anillo inválido sigue fallando aquí, como antes).
     const polygon = turf.polygon(this.payload.loteObjetivo.geometry.coordinates);
-    const area = turf.area(polygon);
-    const perimetro = turf.length(polygon, { units: 'meters' });
+
+    // La geometría del payload va en UTM (metros), no en grados. turf.area/length
+    // esperan lon/lat: con UTM devolvían billones de m² y millones de metros, y por
+    // eso TODO plano salía marcado "requiere revisión" y, si el perímetro oficial
+    // venía null (la web), se imprimía un perímetro absurdo. Se usa geometría plana
+    // en metros; solo si el anillo viniera realmente en grados se mantiene turf.
+    const anillo = this.payload.loteObjetivo.geometry.coordinates[0];
+    const enGrados = parecenGrados(anillo);
+    const area = enGrados ? turf.area(polygon) : areaPlanaM2(anillo);
+    const perimetro = enGrados ? turf.length(polygon, { units: 'meters' }) : perimetroPlanoM(anillo);
 
     // Segmentos/linderos, en cambio, deben ser UNO POR LADO REAL: si se
     // usara la geometría expandida acá, un solo lado curvo (ej. arco de
