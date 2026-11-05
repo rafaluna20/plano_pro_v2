@@ -39,7 +39,13 @@ import { muestrearArco } from "@/lib/geometry/arcoUtils";
 import * as turf from "@turf/turf";
 import { drawCoordinatesTechnicalTable } from "./CoordinatesTable";
 import { esPredio } from "./perfilDocumento";
-import { filasMembretePredio, fechaPeru, rotuloPredioEnPlano } from "./membretePredio";
+import {
+  filasMembretePredio,
+  fechaPeru,
+  rotuloPredioEnPlano,
+  MEMBRETE_PREDIO,
+  ALTURA_MEMBRETE_PREDIO_MM,
+} from "./membretePredio";
 
 // ============================================================================
 // TIPOS INTERNOS
@@ -334,10 +340,10 @@ export class PlanoPerimetricoGeneratorV2 {
 
     const titleBarHeight = LAYOUT.ALTURAS.HEADER;
     const ubicacionHeight = LAYOUT.ALTURAS.UBICACION;
-    // El membrete de un PREDIO lleva 2 filas más (sistema de coordenadas y profesional): 7 filas
-    // de 10 mm. El de habilitación urbana no cambia.
+    // El membrete de un PREDIO lleva 2 filas más (sistema de coordenadas y profesional) y su
+    // propia altura (ver MEMBRETE_PREDIO). El de habilitación urbana no cambia.
     const membreteHeight = esPredio(this.payload.configImpresion?.perfil)
-      ? LAYOUT.ALTURAS.MEMBRETE + 15
+      ? ALTURA_MEMBRETE_PREDIO_MM
       : LAYOUT.ALTURAS.MEMBRETE;
 
     const cuadroTecnicoHeight =
@@ -1582,10 +1588,10 @@ export class PlanoPerimetricoGeneratorV2 {
 
   /**
    * Membrete del plano perimétrico para el perfil PREDIO (7 filas): PREDIO, PROPIETARIO,
-   * UBICACIÓN (distrito, provincia, departamento), ÁREA/PERÍMETRO, ESCALA/FECHA, SISTEMA DE
-   * COORDENADAS y PROFESIONAL RESPONSABLE; y en la columna izquierda el logo y un recuadro de
-   * firma y sello. Sin "EMPRESA / ING." ni "Formato de impresión" sueltos: el formato va en
-   * la etiqueta de la escala. Función aparte para no tocar el membrete de habilitación urbana.
+   * UBICACIÓN (hasta 3 líneas), ÁREA/PERÍMETRO, ESCALA (formato)/FECHA, SISTEMA DE COORDENADAS
+   * y PROFESIONAL RESPONSABLE. El logo ocupa toda la columna izquierda (no hay recuadro de
+   * firma: ocupaba demasiado espacio). Letras un 10 % más pequeñas que en el membrete de
+   * habilitación urbana. Función aparte para no tocar ese membrete.
    */
   private async drawMembretePredio(
     pdf: jsPDF,
@@ -1593,7 +1599,7 @@ export class PlanoPerimetricoGeneratorV2 {
     escala: string,
   ): Promise<void> {
     const { x, y, width: w, height: h } = area;
-    const { MEMBRETE } = PLANO_THEME;
+    const { MEMBRETE, FONTS } = PLANO_THEME;
     const loteProps = this.payload.loteObjetivo.properties;
     const cfg = this.payload.configImpresion;
     const filas = filasMembretePredio({
@@ -1616,94 +1622,89 @@ export class PlanoPerimetricoGeneratorV2 {
     const colSplit = w * MEMBRETE.LOGO_COLUMN_PERCENT;
     pdf.line(x + colSplit, y, x + colSplit, y + h);
 
-    // --- Columna izquierda: logo + recuadro de firma y sello ---
-    const logoBoxH = h * 0.36;
+    // --- Columna izquierda: el logo, centrado en toda la altura ---
     if (cfg?.logoUrl) {
       try {
         const res = await fetch(cfg.logoUrl);
         if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
         const data = new Uint8Array(await res.arrayBuffer());
         const format = (res.headers.get("content-type") || "").includes("png") ? "PNG" : "JPEG";
-        new CADDrawing(pdf).drawImageContained(data, format, x + 4, y + 2, colSplit - 8, logoBoxH - 4);
+        new CADDrawing(pdf).drawImageContained(data, format, x + 4, y + 4, colSplit - 8, h - 8);
       } catch (err) {
         console.warn("Fallo al cargar logoUrl:", err);
-        this.drawLogoPlaceholder(pdf, x, y, colSplit, logoBoxH);
+        this.drawLogoPlaceholder(pdf, x, y, colSplit, h);
       }
     } else {
-      this.drawLogoPlaceholder(pdf, x, y, colSplit, logoBoxH);
+      this.drawLogoPlaceholder(pdf, x, y, colSplit, h);
     }
 
+    // --- Columna derecha: 7 filas de altura propia ---
+    const F = MEMBRETE_PREDIO.FACTOR_FUENTE;
+    const tamEtiqueta = FONTS.SIZES.SMALL * F;
+    const tamValor = FONTS.SIZES.BODY * F;
     const dimmed = parseInt(PLANO_THEME.COLORS.DIMMED.slice(1, 3), 16);
     const gray = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
-
-    const firmaX = x + 3;
-    const firmaY = y + logoBoxH + 3;
-    const firmaW = colSplit - 6;
-    const firmaH = h - logoBoxH - 3 - 8;
-    pdf.setDrawColor(gray);
-    pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.rect(firmaX, firmaY, firmaW, firmaH);
-    pdf.setLineDashPattern([], 0);
-    pdf.setTextColor(dimmed);
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-    pdf.text("FIRMA Y SELLO", x + colSplit / 2, y + h - 3, { align: "center" });
-
-    // --- Columna derecha: 7 filas ---
     const startX = x + colSplit + MEMBRETE.PADDING_H;
     const anchoUtil = w - colSplit - MEMBRETE.PADDING_H * 2;
-    const filasN = 7;
-    const lineHeight = h / filasN;
     const midX = startX + 30;
+
+    const tops: number[] = [];
+    MEMBRETE_PREDIO.FILAS_MM.reduce((acc, alto) => {
+      tops.push(y + acc);
+      return acc + alto;
+    }, 0);
 
     const separador = (idx: number) => {
       if (idx === 0) return;
       pdf.setDrawColor(gray);
       pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
-      pdf.line(x + colSplit, y + idx * lineHeight, x + w, y + idx * lineHeight);
+      pdf.line(x + colSplit, tops[idx], x + w, tops[idx]);
     };
     const etiqueta = (txt: string, px: number, idx: number) => {
       pdf.setTextColor(dimmed);
-      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
-      pdf.text(txt, px, y + idx * lineHeight + 3.5);
-    };
-    // Texto de una línea si cabe; si no, hasta DOS líneas más pequeñas. Antes (y en el
-    // membrete de habilitación urbana) un texto largo se achicaba y se cortaba con "...".
-    const filaSimple = (idx: number, label: string, valor: string) => {
-      separador(idx);
-      etiqueta(label, startX, idx);
-      const baseY = y + idx * lineHeight;
-      pdf.setTextColor(0);
-      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
-      if (pdf.getTextWidth(valor) <= anchoUtil) {
-        pdf.text(valor, startX, baseY + 8);
-        return;
-      }
-      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
-      const lineas: string[] = pdf.splitTextToSize(valor, anchoUtil);
-      if (lineas.length > 2) {
-        // Aún no cabe en dos líneas: se corta la segunda con puntos suspensivos.
-        const resto = lineas.slice(1).join(" ");
-        let l2 = resto;
-        while (l2.length > 1 && pdf.getTextWidth(l2 + "...") > anchoUtil) l2 = l2.slice(0, -1);
-        lineas.splice(1, lineas.length - 1, l2 + "...");
-      }
-      pdf.text(lineas[0], startX, baseY + 6.3);
-      if (lineas[1]) pdf.text(lineas[1], startX, baseY + 9.2);
+      pdf.setFontSize(tamEtiqueta);
+      pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.NORMAL);
+      pdf.text(txt, px, tops[idx] + 3.1);
     };
     const valorNegrita = (txt: string, px: number, idx: number) => {
       pdf.setTextColor(0);
-      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
-      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
-      pdf.text(txt, px, y + idx * lineHeight + 8);
+      pdf.setFontSize(tamValor);
+      pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.BOLD);
+      pdf.text(txt, px, tops[idx] + 7.1);
+    };
+    // Una línea; si no cabe, se achica (como el resto del plano) hasta el tamaño mínimo.
+    const filaSimple = (idx: number, label: string, valor: string) => {
+      separador(idx);
+      etiqueta(label, startX, idx);
+      pdf.setTextColor(0);
+      this.drawTextAutoFit(pdf, valor, startX, tops[idx] + 7.1, anchoUtil, tamValor);
+    };
+    // Texto largo (ubicación): una línea si cabe; si no, hasta N líneas pequeñas. Solo si ni así
+    // cabe se corta, y la última línea termina en "...".
+    const filaMultilinea = (idx: number, label: string, valor: string, maxLineas: number) => {
+      separador(idx);
+      etiqueta(label, startX, idx);
+      pdf.setTextColor(0);
+      pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.BOLD);
+      pdf.setFontSize(tamValor);
+      if (pdf.getTextWidth(valor) <= anchoUtil) {
+        pdf.text(valor, startX, tops[idx] + 7.1);
+        return;
+      }
+      pdf.setFontSize(tamEtiqueta);
+      let lineas: string[] = pdf.splitTextToSize(valor, anchoUtil);
+      if (lineas.length > maxLineas) {
+        const resto = lineas.slice(maxLineas - 1).join(" ");
+        let ultima = resto;
+        while (ultima.length > 1 && pdf.getTextWidth(ultima + "...") > anchoUtil) ultima = ultima.slice(0, -1);
+        lineas = [...lineas.slice(0, maxLineas - 1), ultima + "..."];
+      }
+      lineas.forEach((l, k) => pdf.text(l, startX, tops[idx] + 6.0 + k * 2.4));
     };
 
     filaSimple(0, "PREDIO:", filas.predio);
     filaSimple(1, "PROPIETARIO:", filas.propietario);
-    filaSimple(2, "UBICACIÓN:", filas.ubicacion);
+    filaMultilinea(2, "UBICACIÓN:", filas.ubicacion, MEMBRETE_PREDIO.MAX_LINEAS_UBICACION);
 
     separador(3);
     etiqueta("ÁREA:", startX, 3);

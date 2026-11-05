@@ -57,7 +57,10 @@ export function fechaPeru(d: Date = new Date()): string {
 }
 
 export function filasMembretePredio(d: DatosMembretePredio): FilasMembretePredio {
-  const ubicacion = [d.direccion, d.sector, d.distrito, d.provincia, d.departamento]
+  // Sin sector, el adaptador usa el nombre del predio como "urbanización": no se repite en la
+  // ubicación ("..., villa sur 2, Pucusana...") cuando es lo mismo que la denominación.
+  const sector = limpio(d.sector).toLowerCase() === limpio(d.denominacion).toLowerCase() ? '' : d.sector;
+  const ubicacion = [d.direccion, sector, d.distrito, d.provincia, d.departamento]
     .map(limpio)
     .filter(Boolean)
     .join(', ');
@@ -80,3 +83,18 @@ export function filasMembretePredio(d: DatosMembretePredio): FilasMembretePredio
 export function rotuloPredioEnPlano(denominacion?: string): string {
   return limpio(denominacion).toUpperCase() || 'PREDIO';
 }
+
+/**
+ * Medidas del membrete del predio (mm). Letras un 10 % más pequeñas que el membrete de
+ * habilitación urbana (etiquetas 6 -> 5.4 pt, valores 8 -> 7.2 pt) y sin recuadro de firma.
+ * La fila de UBICACIÓN es más alta porque admite hasta 3 líneas: las direcciones reales son
+ * largas y antes se cortaban con "...".
+ */
+export const MEMBRETE_PREDIO = {
+  FACTOR_FUENTE: 0.9,
+  /** PREDIO, PROPIETARIO, UBICACIÓN (3 líneas), ÁREA/PERÍMETRO, ESCALA/FECHA, SISTEMA, PROFESIONAL */
+  FILAS_MM: [8.5, 8.5, 12, 8.5, 8.5, 8.5, 8.5],
+  MAX_LINEAS_UBICACION: 3,
+} as const;
+
+export const ALTURA_MEMBRETE_PREDIO_MM: number = MEMBRETE_PREDIO.FILAS_MM.reduce((a, b) => a + b, 0);

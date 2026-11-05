@@ -160,7 +160,7 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
 
   it('imprime los campos nuevos: ubicación completa, sistema de coordenadas, profesional y firma', async () => {
     const t = await textosDe('rect', UB, 'PREDIO', { config: PROF, crudo: true });
-    for (const esperado of ['PREDIO:', 'PROPIETARIO:', 'UBICACIÓN:', 'SISTEMA DE COORDENADAS:', 'PROFESIONAL RESPONSABLE:', 'FIRMA Y SELLO', 'ESCALA (A3):']) {
+    for (const esperado of ['PREDIO:', 'PROPIETARIO:', 'UBICACIÓN:', 'SISTEMA DE COORDENADAS:', 'PROFESIONAL RESPONSABLE:', 'ESCALA (A3):']) {
       expect(t, esperado).toContain(esperado);
     }
     // La ubicación larga puede ocupar dos líneas: se comprueba el contenido, no el corte.
@@ -169,6 +169,8 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     for (const parte of ['Km 12 Panamericana Sur', 'Sector Los Olivos', 'Subtanjalla']) expect(ubicacion).toContain(parte);
     expect(t).toContain('UTM WGS84 - zona 18S');
     expect(t).toContain('Ing. Ana Torres Ríos - CIP 123456');
+    // Sin recuadro de firma y sello: ocupaba demasiado espacio en el membrete.
+    expect(t).not.toContain('FIRMA Y SELLO');
     expect(t).toContain('Titular de Prueba SAC');
   }, 60000);
 
@@ -190,6 +192,16 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     const t = await textosDe('rect', undefined, 'PREDIO', { config: PROF, crudo: true });
     expect(t.filter((x) => /EMPRESA \/ ING|Formato de impresi|MATRIZ/i.test(x) || /^LOTE\s/.test(x))).toEqual([]);
     expect(t).toContain('PREDIO RECT'); // rótulo dentro del dibujo: la denominación del predio
+  }, 60000);
+
+  it('una dirección larga real se reparte en hasta 3 líneas y NO se corta con "..."', async () => {
+    const larga = 'lote denominado villa sur 2,ubicado entre el km55 ykm56 de la via autopista panamerica del sur,ingreso hacia la playa';
+    const t = await textosDe('rect', { departamento: 'Lima', provincia: 'Lima', distrito: 'Pucusana', direccion: larga }, 'PREDIO', { config: PROF, crudo: true });
+    const i = t.indexOf('UBICACIÓN:');
+    const lineas = t.slice(i + 1, i + 4);
+    expect(lineas.some((l) => l.endsWith('...'))).toBe(false);
+    const unido = lineas.join(' ');
+    for (const parte of ['villa sur 2', 'km55', 'autopista', 'ingreso hacia la playa', 'Pucusana']) expect(unido).toContain(parte);
   }, 60000);
 
   it('el membrete de habilitación urbana NO cambia: sigue con sus textos de siempre', async () => {

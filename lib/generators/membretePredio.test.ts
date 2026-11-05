@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fechaPeru, filasMembretePredio, rotuloPredioEnPlano } from './membretePredio';
+import { fechaPeru, filasMembretePredio, rotuloPredioEnPlano, MEMBRETE_PREDIO, ALTURA_MEMBRETE_PREDIO_MM } from './membretePredio';
 
 describe('fechaPeru', () => {
   it('da dd/mm/aaaa (día primero), no mm/dd', () => {
@@ -56,6 +56,16 @@ describe('filasMembretePredio', () => {
     expect(f.propietario).toBe('No consta');
   });
 
+  it('un sector igual a la denominación no se repite en la ubicación (el adaptador lo rellena con el nombre)', () => {
+    const f = filasMembretePredio({ denominacion: 'villa sur 2', sector: 'Villa Sur 2', distrito: 'Pucusana', provincia: 'Lima', departamento: 'Lima' });
+    expect(f.ubicacion).toBe('Pucusana, Lima, Lima');
+  });
+
+  it('un sector distinto de la denominación sí se imprime', () => {
+    const f = filasMembretePredio({ denominacion: 'Parcela 5', sector: 'Sector Los Olivos', distrito: 'Ica' });
+    expect(f.ubicacion).toBe('Sector Los Olivos, Ica');
+  });
+
   it('sin denominación usa el sector; la zona UTM por defecto es 18', () => {
     expect(filasMembretePredio({ sector: 'Sector X' }).predio).toBe('Sector X');
     expect(filasMembretePredio({ zonaUTM: 17 }).sistema).toBe('UTM WGS84 - zona 17S');
@@ -67,5 +77,20 @@ describe('rotuloPredioEnPlano', () => {
     expect(rotuloPredioEnPlano('Parcela 05')).toBe('PARCELA 05');
     expect(rotuloPredioEnPlano('')).toBe('PREDIO');
     expect(rotuloPredioEnPlano(undefined)).toBe('PREDIO');
+  });
+});
+
+describe('medidas del membrete del predio', () => {
+  it('letras un 10 % más pequeñas (factor 0.9) y altura total de 63 mm', () => {
+    expect(MEMBRETE_PREDIO.FACTOR_FUENTE).toBe(0.9);
+    expect(ALTURA_MEMBRETE_PREDIO_MM).toBe(63);
+  });
+  it('7 filas; la de ubicación es la más alta (admite 3 líneas)', () => {
+    expect(MEMBRETE_PREDIO.FILAS_MM).toHaveLength(7);
+    expect(Math.max(...MEMBRETE_PREDIO.FILAS_MM)).toBe(MEMBRETE_PREDIO.FILAS_MM[2]);
+    expect(MEMBRETE_PREDIO.MAX_LINEAS_UBICACION).toBe(3);
+  });
+  it('es más bajo que el membrete anterior de predios (70 mm)', () => {
+    expect(ALTURA_MEMBRETE_PREDIO_MM).toBeLessThan(70);
   });
 });
