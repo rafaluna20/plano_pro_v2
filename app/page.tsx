@@ -24,6 +24,11 @@ import {
   Upload,
   Search,
   Loader2,
+  FolderOpen,
+  Save,
+  FilePlus,
+  Star,
+  Copy,
 } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PDFViewerWrapper } from "@/components/planos/PDFViewerWrapper";
@@ -38,6 +43,27 @@ import { UTMCoordinate } from "@/types/planos";
 import { getUtmProjString, DEFAULT_UTM_ZONE } from "@/lib/geometry/utmUtils";
 import { authFetch } from "@/lib/auth/authFetch";
 import { construirPayloadExpediente } from "@/lib/editor/expedientePayload";
+import {
+  aplicarPlantilla,
+  empaquetarProyecto,
+  extraerPlantilla,
+  LIMITE_BYTES_PROYECTO,
+  mezclar,
+  nombreSugerido,
+  plantillaVacia,
+  restaurarProyecto,
+  tamanoBytes,
+  type PlantillaDatos,
+} from "@/lib/editor/proyectos";
+import {
+  abrirProyecto,
+  actualizarProyecto,
+  crearProyecto,
+  ErrorProyectos,
+  guardarPlantilla,
+  leerPlantilla,
+} from "@/lib/editor/proyectosApi";
+import { GuardarProyectoDialog, ProyectosModal } from "@/components/editor/ProyectosModal";
 
 const LocationMap = dynamic(() => import("@/components/editor/LocationMap"), {
   ssr: false,
@@ -406,7 +432,7 @@ const getGridStep = (range: number) => {
 
 export default function EditorPlanos() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   // Cargar CSS de Leaflet dinámicamente
   useEffect(() => {
@@ -427,6 +453,25 @@ export default function EditorPlanos() {
 
   // Estados principales
   const [data, setData] = useState<LoteData>(INITIAL_DATA);
+
+  // --- PROYECTOS GUARDADOS (retomar el trabajo después) ---
+  // `huella` es el JSON del último estado guardado/abierto: si `data` difiere, hay cambios sin guardar.
+  const [proyecto, setProyecto] = useState<{ id: string | null; nombre: string }>({ id: null, nombre: "" });
+  const [huella, setHuella] = useState<string>(() => JSON.stringify(INITIAL_DATA));
+  const [sinGuardar, setSinGuardar] = useState(false);
+  const [guardandoProyecto, setGuardandoProyecto] = useState(false);
+  const [showProyectos, setShowProyectos] = useState(false);
+  const [showGuardarComo, setShowGuardarComo] = useState(false);
+  const [plantilla, setPlantilla] = useState<PlantillaDatos | null>(null);
+  const [confirmDescartar, setConfirmDescartar] = useState<{ texto: string; ejecutar: () => void } | null>(null);
+  const [borradorPendiente, setBorradorPendiente] = useState<{
+    guardadoEn: number;
+    proyecto: { id: string | null; nombre: string };
+    data: unknown;
+  } | null>(null);
+  const dataRef = useRef<LoteData>(data);
+  dataRef.current = data;
+  const claveBorrador = `planopro:borrador:${user?.id ?? "anon"}`;
   const [satelliteUrl, setSatelliteUrl] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
@@ -461,6 +506,212 @@ export default function EditorPlanos() {
   // Estados para Búsqueda (OSM)
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+
+  // ¿Hay cambios sin guardar? (con espera de 0.5 s: el JSON del estado puede ser grande)
+  useEffect(() => {
+    const t = setTimeout(() => setSinGuardar(JSON.stringify(data) !== huella), 500);
+    return () => clearTimeout(t);
+  }, [data, huella]);
+
+  // Borrador local: copia de respaldo en este navegador mientras haya cambios sin guardar,
+  // por si se cierra la pestaña o se cae la sesión. Es solo una red de seguridad.
+  useEffect(() => {
+    if (!sinGuardar) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(claveBorrador, JSON.stringify({ guardadoEn: Date.now(), proyecto, data }));
+      } catch {
+        // cuota llena o localStorage bloqueado: el borrador es opcional
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [data, sinGuardar, proyecto, claveBorrador]);
+
+  const borrarBorrador = () => {
+    try {
+      localStorage.removeItem(claveBorrador);
+    } catch {
+      // nada que borrar
+    }
+  };
+
+  // Al entrar: ofrece recuperar un borrador que no se llegó a guardar.
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const crudo = localStorage.getItem(claveBorrador);
+      if (!crudo) return;
+      const b = JSON.parse(crudo);
+      const reciente = typeof b?.guardadoEn === "number" && Date.now() - b.guardadoEn < 30 * 24 * 3600 * 1000;
+      if (reciente && b?.data && JSON.stringify(b.data) !== JSON.stringify(INITIAL_DATA)) setBorradorPendiente(b);
+      else localStorage.removeItem(claveBorrador);
+    } catch {
+      // borrador ilegible: se ignora
+    }
+  }, [user?.id, claveBorrador]);
+
+  // Datos frecuentes: se cargan una vez y rellenan el editor si todavía está en blanco.
+  const plantillaCargada = useRef(false);
+  useEffect(() => {
+    if (!token || plantillaCargada.current) return;
+    plantillaCargada.current = true;
+    leerPlantilla()
+      .then((p) => {
+        if (!p) return;
+        setPlantilla(p);
+        if (dataRef.current === INITIAL_DATA) {
+          const lleno = aplicarPlantilla(INITIAL_DATA, p);
+          setData(lleno);
+          setHuella(JSON.stringify(lleno)); // aplicar la plantilla no cuenta como "cambios sin guardar"
+        }
+      })
+      .catch(() => {
+        // sin plantilla (o tabla aún sin crear): el editor funciona igual
+      });
+  }, [token]);
+
+  // Avisa antes de cerrar o recargar la pestaña con cambios sin guardar.
+  useEffect(() => {
+    if (!sinGuardar) return;
+    const aviso = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", aviso);
+    return () => window.removeEventListener("beforeunload", aviso);
+  }, [sinGuardar]);
+
+  const avisoError = (e: unknown) =>
+    toast.error(e instanceof ErrorProyectos ? e.message : "No se pudo completar la operación.", { duration: 10000 });
+
+  /** Ejecuta `accion` ya, o pide confirmación si se perderían cambios sin guardar. */
+  const pedirDescartar = (texto: string, accion: () => void) => {
+    if (!sinGuardar) accion();
+    else setConfirmDescartar({ texto, ejecutar: accion });
+  };
+
+  const guardarProyecto = async (nombreElegido?: string, comoNuevo = false) => {
+    const nombre = (nombreElegido ?? proyecto.nombre).trim();
+    if (!nombre) {
+      setShowGuardarComo(true);
+      return;
+    }
+    const cuerpo = empaquetarProyecto(data);
+    if (tamanoBytes(cuerpo) > LIMITE_BYTES_PROYECTO) {
+      toast.error(
+        "El proyecto es demasiado grande para guardarlo (máx. 4 MB), normalmente por muchos vecinos importados o una imagen incrustada.",
+        { duration: 10000 },
+      );
+      return;
+    }
+    setGuardandoProyecto(true);
+    try {
+      let r;
+      if (proyecto.id && !comoNuevo) {
+        try {
+          r = await actualizarProyecto(proyecto.id, nombre, cuerpo);
+        } catch (e) {
+          // El proyecto se eliminó desde otra pestaña: se guarda como nuevo en vez de perder el trabajo.
+          if (e instanceof ErrorProyectos && e.code === "NO_ENCONTRADO") r = await crearProyecto(nombre, cuerpo);
+          else throw e;
+        }
+      } else {
+        r = await crearProyecto(nombre, cuerpo);
+      }
+      setProyecto({ id: r.id, nombre: r.nombre });
+      setHuella(JSON.stringify(data));
+      setSinGuardar(false);
+      borrarBorrador();
+      setShowGuardarComo(false);
+      toast.success(`Proyecto «${r.nombre}» guardado`);
+    } catch (e) {
+      avisoError(e);
+    } finally {
+      setGuardandoProyecto(false);
+    }
+  };
+  // Ctrl+S / Cmd+S guarda (siempre con el `guardarProyecto` más reciente).
+  const guardarRef = useRef(guardarProyecto);
+  guardarRef.current = guardarProyecto;
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void guardarRef.current();
+      }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, []);
+
+  const cargarProyecto = async (id: string) => {
+    const idToast = toast.loading("Abriendo proyecto...");
+    try {
+      const p = await abrirProyecto(id);
+      let restaurado: LoteData;
+      try {
+        restaurado = restaurarProyecto(INITIAL_DATA, p.datos);
+      } catch {
+        toast.error("Ese proyecto guardado está dañado y no se puede abrir.", { id: idToast });
+        return;
+      }
+      setData(restaurado);
+      setHuella(JSON.stringify(restaurado));
+      setProyecto({ id: p.id, nombre: p.nombre });
+      setSelectedNeighbor(null);
+      setSinGuardar(false);
+      borrarBorrador();
+      setShowProyectos(false);
+      toast.success(`Proyecto «${p.nombre}» abierto`, { id: idToast });
+    } catch (e) {
+      toast.dismiss(idToast);
+      avisoError(e);
+    }
+  };
+
+  const nuevoProyecto = () => {
+    const vacio = aplicarPlantilla(INITIAL_DATA, plantilla);
+    setData(vacio);
+    setHuella(JSON.stringify(vacio));
+    setProyecto({ id: null, nombre: "" });
+    setSelectedNeighbor(null);
+    setSinGuardar(false);
+    borrarBorrador();
+    toast.success(plantilla ? "Proyecto nuevo, con tus datos frecuentes" : "Proyecto nuevo");
+  };
+
+  const guardarDatosFrecuentes = async () => {
+    const p = extraerPlantilla(data);
+    if (plantillaVacia(p)) {
+      toast.error("Primero completa profesional, ubicación o trámite en este proyecto.");
+      return;
+    }
+    try {
+      setPlantilla(await guardarPlantilla(p));
+      toast.success("Datos frecuentes guardados: se rellenarán solos en cada proyecto nuevo.");
+    } catch (e) {
+      avisoError(e);
+    }
+  };
+
+  const aplicarDatosFrecuentes = () => {
+    if (plantillaVacia(plantilla)) {
+      toast.error("Aún no guardaste datos frecuentes.");
+      return;
+    }
+    setData((prev) => aplicarPlantilla(prev, plantilla));
+    toast.success("Datos frecuentes aplicados.");
+  };
+
+  const recuperarBorrador = () => {
+    if (!borradorPendiente) return;
+    const recuperado = mezclar(INITIAL_DATA, borradorPendiente.data);
+    setData(recuperado);
+    setProyecto(borradorPendiente.proyecto ?? { id: null, nombre: "" });
+    setHuella(JSON.stringify(INITIAL_DATA)); // sigue sin guardar en el servidor
+    setBorradorPendiente(null);
+    toast.success("Borrador recuperado. Guárdalo para no perderlo.");
+  };
 
   // --- AUTO-CALCULO DE ÁREA ---
   useEffect(() => {
@@ -1914,6 +2165,127 @@ export default function EditorPlanos() {
             </button>
           </div>
         </header>
+
+        {/* PROYECTO: guardar y retomar */}
+        <div className="max-w-[1400px] mx-auto mb-4 flex flex-wrap items-center gap-2 bg-white px-4 py-3 rounded-xl shadow-sm border border-slate-200 text-sm">
+          <button
+            onClick={() => pedirDescartar("¿Empezar un proyecto nuevo y descartar los cambios sin guardar?", nuevoProyecto)}
+            className="px-3 py-1.5 font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5"
+          >
+            <FilePlus size={15} /> Nuevo
+          </button>
+          <button
+            onClick={() => setShowProyectos(true)}
+            className="px-3 py-1.5 font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5"
+          >
+            <FolderOpen size={15} /> Mis proyectos
+          </button>
+          <button
+            onClick={() => void guardarProyecto()}
+            disabled={guardandoProyecto}
+            title="Guardar (Ctrl+S)"
+            className="px-3 py-1.5 font-medium text-white bg-blue-800 hover:bg-blue-900 rounded-lg flex items-center gap-1.5 disabled:opacity-60"
+          >
+            {guardandoProyecto ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar
+          </button>
+          <button
+            onClick={() => setShowGuardarComo(true)}
+            disabled={guardandoProyecto}
+            title="Guardar una copia con otro nombre"
+            className="px-3 py-1.5 font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 disabled:opacity-60"
+          >
+            <Copy size={15} /> Guardar como…
+          </button>
+          <div className="ml-2 text-slate-600 truncate max-w-[40ch]" title={proyecto.nombre}>
+            {proyecto.nombre ? <b className="text-slate-900">{proyecto.nombre}</b> : <span className="text-slate-400">Proyecto sin guardar</span>}
+            <span className={`ml-2 text-xs font-medium ${sinGuardar ? "text-amber-600" : "text-green-600"}`}>
+              {sinGuardar ? "● cambios sin guardar" : proyecto.id ? "✓ guardado" : ""}
+            </span>
+          </div>
+          <div className="md:ml-auto flex items-center gap-2">
+            <button
+              onClick={guardarDatosFrecuentes}
+              title="Guarda profesional, colegiatura, trámite y ubicación (depto./prov./distrito) para rellenarlos solos en cada proyecto nuevo"
+              className="px-3 py-1.5 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg flex items-center gap-1.5"
+            >
+              <Star size={15} className="text-amber-500" /> Guardar datos frecuentes
+            </button>
+            <button
+              onClick={aplicarDatosFrecuentes}
+              disabled={plantillaVacia(plantilla)}
+              title="Rellena este proyecto con tus datos frecuentes"
+              className="px-3 py-1.5 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg disabled:opacity-50"
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+
+        {borradorPendiente && (
+          <div className="max-w-[1400px] mx-auto mb-4 flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 text-sm text-amber-900">
+            <span>
+              Hay un borrador sin guardar del {new Date(borradorPendiente.guardadoEn).toLocaleString("es-PE", { timeZone: "America/Lima" })}
+              {borradorPendiente.proyecto?.nombre ? ` («${borradorPendiente.proyecto.nombre}»)` : ""}
+            </span>
+            <button onClick={recuperarBorrador} className="px-3 py-1 font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg">
+              Recuperar
+            </button>
+            <button
+              onClick={() => {
+                borrarBorrador();
+                setBorradorPendiente(null);
+              }}
+              className="px-3 py-1 bg-white border border-amber-300 hover:bg-amber-100 rounded-lg"
+            >
+              Descartar
+            </button>
+          </div>
+        )}
+
+        {confirmDescartar && (
+          <div className="max-w-[1400px] mx-auto mb-4 flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border border-red-300 bg-red-50 text-sm text-red-900">
+            <span>{confirmDescartar.texto}</span>
+            <button
+              onClick={() => {
+                const f = confirmDescartar.ejecutar;
+                setConfirmDescartar(null);
+                f();
+              }}
+              className="px-3 py-1 font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg"
+            >
+              Descartar cambios
+            </button>
+            <button onClick={() => setConfirmDescartar(null)} className="px-3 py-1 bg-white border border-red-300 hover:bg-red-100 rounded-lg">
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        <ProyectosModal
+          open={showProyectos}
+          actualId={proyecto.id}
+          onClose={() => setShowProyectos(false)}
+          onAbrir={(id) => {
+            if (id === proyecto.id && !sinGuardar) {
+              setShowProyectos(false);
+              return;
+            }
+            setShowProyectos(false);
+            pedirDescartar("¿Abrir otro proyecto y descartar los cambios sin guardar?", () => void cargarProyecto(id));
+          }}
+          onEliminado={(id) => {
+            // Si se eliminó el proyecto abierto, el editor lo suelta: el próximo «Guardar» crea uno nuevo.
+            if (id === proyecto.id) setProyecto((p) => ({ id: null, nombre: p.nombre }));
+          }}
+        />
+        <GuardarProyectoDialog
+          open={showGuardarComo}
+          nombreInicial={proyecto.nombre || nombreSugerido(data)}
+          guardando={guardandoProyecto}
+          titulo={proyecto.id ? "Guardar como…" : "Guardar proyecto"}
+          onGuardar={(nombre) => void guardarProyecto(nombre, true)}
+          onCancelar={() => setShowGuardarComo(false)}
+        />
 
         <main className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* PANEL IZQUIERDO */}

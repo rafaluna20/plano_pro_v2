@@ -23,6 +23,8 @@ model User {
   // Relaciones
   apiKeys       ApiKey[]
   planos        Plano[]
+  proyectos     Proyecto[]
+  plantillaDatos PlantillaDatos?
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -194,4 +196,35 @@ model ApiLog {
   @@index([apiKeyId])
   @@index([createdAt])
   @@index([endpoint])
+}
+
+// ==========================================
+// PROYECTOS GUARDADOS DEL EDITOR WEB
+// ==========================================
+
+// Lo que el usuario escribió en el editor (vértices, vecinos, membrete...), para
+// retomarlo después. `datos` es el estado completo del editor; `resumen` guarda lo
+// justo para la lista sin traer el JSON grande.
+model Proyecto {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nombre      String
+  datos       Json
+  resumen     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+  @@map("proyectos")
+}
+
+// Datos que se repiten en cada proyecto (profesional, ubicación, trámite). Uno por usuario.
+model PlantillaDatos {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  datos     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("plantillas_datos")
 }
