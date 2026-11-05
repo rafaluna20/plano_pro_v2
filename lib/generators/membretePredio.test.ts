@@ -44,7 +44,7 @@ describe('filasMembretePredio', () => {
     expect(f.predio).toBe('No consta');
     expect(f.propietario).toBe('No consta');
     expect(f.ubicacion).toBe('No consta');
-    expect(f.profesional).toBe('No consta');
+    expect(f.profesional).toBe('');
   });
 
   it('un profesional con solo nombre o solo colegiatura se muestra igual', () => {
@@ -91,9 +91,13 @@ describe('rotuloPredioEnPlano', () => {
 });
 
 describe('medidas del membrete del predio', () => {
-  it('letras al tamaño original (factor 1) y altura total de 62.5 mm', () => {
+  it('tamaños pedidos por fila y altura total de 60 mm', () => {
     expect(MEMBRETE_PREDIO.FACTOR_FUENTE).toBe(1);
-    expect(ALTURA_MEMBRETE_PREDIO_MM).toBe(62.5);
+    expect(ALTURA_MEMBRETE_PREDIO_MM).toBe(60);
+    expect(MEMBRETE_PREDIO.TAMANOS.proyecto).toEqual({ etiqueta: 0.95, valor: 1.2 });
+    expect(MEMBRETE_PREDIO.TAMANOS.propietario).toEqual({ etiqueta: 1, valor: 1.1 });
+    expect(MEMBRETE_PREDIO.TAMANOS.predio).toEqual({ etiqueta: 0.95, valor: 0.9 });
+    expect(MEMBRETE_PREDIO.TAMANOS.perimetro).toEqual({ etiqueta: 0.95, valor: 0.95 });
   });
   it('7 filas; la de ubicación (4.ª) es la más alta, porque admite 3 líneas', () => {
     expect(MEMBRETE_PREDIO.FILAS_MM).toHaveLength(7);

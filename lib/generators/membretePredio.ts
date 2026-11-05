@@ -76,7 +76,8 @@ export function filasMembretePredio(d: DatosMembretePredio): FilasMembretePredio
     propietario: limpio(d.propietario) || NO_CONSTA,
     ubicacion: ubicacion || NO_CONSTA,
     sistema: `UTM WGS84 - zona ${d.zonaUTM ?? 18}S`,
-    profesional: nombre && colegiatura ? `${nombre} - ${colegiatura}` : nombre || colegiatura || NO_CONSTA,
+    // Sin profesional queda en blanco: el membrete deja el espacio para completarlo a mano.
+    profesional: nombre && colegiatura ? `${nombre} - ${colegiatura}` : nombre || colegiatura,
     // La escala impresa solo vale si se imprime en este papel: se conserva el dato, junto a la escala.
     etiquetaEscala: `ESCALA (${(d.formatoPapel || 'A3').toUpperCase()}):`,
   };
@@ -96,11 +97,19 @@ export function rotuloPredioEnPlano(denominacion?: string, sector?: string): str
  * admite hasta 3 líneas: las direcciones reales son largas y antes se cortaban con "...".
  *
  * Orden: PROYECTO, PROPIETARIO, PREDIO (cada uno en una sola línea, etiqueta y valor juntos),
- * UBICACIÓN, [ÁREA | PERÍMETRO], [ESCALA | FECHA | SISTEMA DE COORDENADAS], PROFESIONAL RESPONSABLE.
+ * UBICACIÓN, [ÁREA | PERÍMETRO] (en una línea), [ESCALA | FECHA | SISTEMA DE COORDENADAS],
+ * PROFESIONAL RESPONSABLE (en una línea; en blanco si no hay).
  */
 export const MEMBRETE_PREDIO = {
   FACTOR_FUENTE: 1,
-  FILAS_MM: [7, 7, 7, 13, 9.5, 9.5, 9.5],
+  FILAS_MM: [7.5, 7.5, 7.5, 13, 7.5, 9.5, 7.5],
+  /** Factor sobre el tamaño base (etiqueta 6 pt, valor 8 pt) pedido para cada fila. */
+  TAMANOS: {
+    proyecto: { etiqueta: 0.95, valor: 1.2 },
+    propietario: { etiqueta: 1, valor: 1.1 },
+    predio: { etiqueta: 0.95, valor: 0.9 },
+    perimetro: { etiqueta: 0.95, valor: 0.95 },
+  },
   MAX_LINEAS_UBICACION: 3,
 } as const;
 

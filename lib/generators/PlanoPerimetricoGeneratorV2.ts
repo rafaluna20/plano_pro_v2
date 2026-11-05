@@ -1672,17 +1672,25 @@ export class PlanoPerimetricoGeneratorV2 {
       valor(txt, startX, idx, anchoUtil);
     };
     // Etiqueta y valor en la MISMA línea ("PROYECTO: Saneamiento físico legal"), en una fila baja.
-    const filaEnLinea = (idx: number, label: string, txt: string) => {
+    // `fe` y `fv` escalan el tamaño de la etiqueta y del valor (1 = tamaño base del plano).
+    type CeldaEnLinea = { label: string; txt: string; fe?: number; fv?: number };
+    const filaEnLineaColumnas = (idx: number, celdas: CeldaEnLinea[]) => {
       separador(idx);
       const base = tops[idx] + MEMBRETE_PREDIO.FILAS_MM[idx] / 2 + 1.1;
-      pdf.setTextColor(dimmed);
-      pdf.setFontSize(tamEtiqueta);
-      pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.NORMAL);
-      pdf.text(label, startX, base);
-      const dx = pdf.getTextWidth(label) + 2;
-      pdf.setTextColor(0);
-      this.drawTextAutoFit(pdf, txt, startX + dx, base, anchoUtil - dx, tamValor);
+      const ancho = anchoUtil / celdas.length;
+      celdas.forEach((c, k) => {
+        const px = startX + k * ancho;
+        pdf.setTextColor(dimmed);
+        pdf.setFontSize(tamEtiqueta * (c.fe ?? 1));
+        pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.NORMAL);
+        pdf.text(c.label, px, base);
+        const dx = pdf.getTextWidth(c.label) + 2;
+        pdf.setTextColor(0);
+        this.drawTextAutoFit(pdf, c.txt, px + dx, base, ancho - dx - MEMBRETE.PADDING_H, tamValor * (c.fv ?? 1));
+      });
     };
+    const filaEnLinea = (idx: number, label: string, txt: string, fe = 1, fv = 1) =>
+      filaEnLineaColumnas(idx, [{ label, txt, fe, fv }]);
     // Varias columnas en una misma fila: [etiqueta, valor] por columna; `pesos` reparte el ancho
     // (por defecto, columnas iguales).
     const filaColumnas = (idx: number, columnas: [string, string][], pesos?: number[]) => {
@@ -1720,13 +1728,20 @@ export class PlanoPerimetricoGeneratorV2 {
       lineas.forEach((l, k) => pdf.text(l, startX, tops[idx] + 6.9 + k * 2.7));
     };
 
-    filaEnLinea(0, "PROYECTO:", filas.proyecto);
-    filaEnLinea(1, "PROPIETARIO:", filas.propietario);
-    filaEnLinea(2, "PREDIO:", filas.predio);
+    // Tamaños pedidos por el usuario (factor sobre el tamaño base: etiqueta 6 pt, valor 8 pt).
+    const T = MEMBRETE_PREDIO.TAMANOS;
+    filaEnLinea(0, "PROYECTO:", filas.proyecto, T.proyecto.etiqueta, T.proyecto.valor);
+    filaEnLinea(1, "PROPIETARIO:", filas.propietario, T.propietario.etiqueta, T.propietario.valor);
+    filaEnLinea(2, "PREDIO:", filas.predio, T.predio.etiqueta, T.predio.valor);
     filaMultilinea(3, "UBICACIÓN:", filas.ubicacion, MEMBRETE_PREDIO.MAX_LINEAS_UBICACION);
-    filaColumnas(4, [
-      ["ÁREA:", `${this.datosProcesados.areaFinal.toFixed(2)} m²`],
-      ["PERÍMETRO:", `${this.datosProcesados.perimetroFinal.toFixed(2)} ml`],
+    filaEnLineaColumnas(4, [
+      { label: "ÁREA:", txt: `${this.datosProcesados.areaFinal.toFixed(2)} m²` },
+      {
+        label: "PERÍMETRO:",
+        txt: `${this.datosProcesados.perimetroFinal.toFixed(2)} ml`,
+        fe: T.perimetro.etiqueta,
+        fv: T.perimetro.valor,
+      },
     ]);
     // El sistema de coordenadas es el texto más largo: lleva la mitad del ancho.
     filaColumnas(
@@ -1738,7 +1753,8 @@ export class PlanoPerimetricoGeneratorV2 {
       ],
       [1, 1, 2],
     );
-    filaSimple(6, "PROFESIONAL RESPONSABLE:", filas.profesional);
+    // Sin profesional el valor queda en blanco (se firma a mano); no se escribe "No consta".
+    filaEnLinea(6, "PROFESIONAL RESPONSABLE:", filas.profesional);
   }
 
   private drawRealUTMGrid(

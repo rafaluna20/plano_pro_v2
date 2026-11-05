@@ -182,11 +182,12 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     expect(t).toContain(`${hoy.day}/${hoy.month}/${hoy.year}`);
   }, 60000);
 
-  it('sin profesional dice "No consta", no queda en blanco', async () => {
+  it('sin profesional la fila queda en blanco (se firma a mano), sin "No consta"', async () => {
     const t = await textosDe('rect', UB, 'PREDIO', { crudo: true });
     const i = t.indexOf('PROFESIONAL RESPONSABLE:');
     expect(i).toBeGreaterThan(-1);
-    expect(t[i + 1]).toBe('No consta');
+    expect((t[i + 1] ?? '').trim()).not.toBe('No consta');
+    expect((t[i + 1] ?? '').trim()).toBe('');
   }, 60000);
 
   it('quita lo de relleno: "EMPRESA / ING.", "Formato de impresión", "MATRIZ" y "LOTE n"', async () => {
