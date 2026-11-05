@@ -438,6 +438,8 @@ export default function EditorPlanos() {
   const [selectedNeighbor, setSelectedNeighbor] = useState<LoteVecino | null>(
     null,
   );
+  // Confirmación en pantalla para vaciar todos los vecinos (sin window.confirm).
+  const [confirmandoVaciar, setConfirmandoVaciar] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   // Instancia viva del mapa Leaflet (modo satelital), usada para capturar una
   // imagen de la vista actual en vez de depender de Google Static Maps.
@@ -496,6 +498,43 @@ export default function EditorPlanos() {
         vecinos: [...prev.contexto.vecinos, newNeighbor],
       },
     }));
+  };
+
+  /**
+   * Elimina TODOS los vecinos (el "contexto"). Se guarda un respaldo y se ofrece
+   * Deshacer: tras importar >1000 polígonos, borrarlos sin vuelta atrás sería
+   * un error caro. No toca los colindantes N/S/E/O de la pestaña General.
+   */
+  const handleEliminarTodosVecinos = () => {
+    const respaldo = data.contexto.vecinos;
+    if (respaldo.length === 0) return;
+    setData((prev) => ({ ...prev, contexto: { ...prev.contexto, vecinos: [] } }));
+    setSelectedNeighbor(null);
+    setConfirmandoVaciar(false);
+    toast(
+      (t) => (
+        <span className="text-sm">
+          Se eliminaron {respaldo.length} vecinos.{" "}
+          <button
+            className="underline font-semibold"
+            onClick={() => {
+              // Se devuelven al principio, conservando lo que se haya agregado después.
+              setData((prev) => ({
+                ...prev,
+                contexto: {
+                  ...prev.contexto,
+                  vecinos: [...respaldo, ...prev.contexto.vecinos],
+                },
+              }));
+              toast.dismiss(t.id);
+            }}
+          >
+            Deshacer
+          </button>
+        </span>
+      ),
+      { duration: 12000, icon: "🗑️" },
+    );
   };
 
   // Importación en bloque de vecinos (archivo con muchos polígonos). Una sola
@@ -2304,6 +2343,36 @@ export default function EditorPlanos() {
                             {data.contexto.vecinos.length}
                           </span>
                         </div>
+
+                        {data.contexto.vecinos.length > 0 &&
+                          (confirmandoVaciar ? (
+                            <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                              <span>
+                                ¿Eliminar los <b>{data.contexto.vecinos.length}</b> lotes vecinos?
+                              </span>
+                              <span className="flex gap-2 shrink-0">
+                                <button
+                                  onClick={handleEliminarTodosVecinos}
+                                  className="px-2 py-1 font-bold text-white bg-red-600 rounded hover:bg-red-700"
+                                >
+                                  Sí, eliminar
+                                </button>
+                                <button
+                                  onClick={() => setConfirmandoVaciar(false)}
+                                  className="px-2 py-1 font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50"
+                                >
+                                  Cancelar
+                                </button>
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmandoVaciar(true)}
+                              className="w-full py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex justify-center items-center gap-1.5"
+                            >
+                              <Trash2 size={13} /> Eliminar todos ({data.contexto.vecinos.length})
+                            </button>
+                          ))}
 
                         <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                           {data.contexto.vecinos.map((vecino, idx) => (
