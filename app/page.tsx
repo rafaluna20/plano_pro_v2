@@ -498,6 +498,44 @@ export default function EditorPlanos() {
     }));
   };
 
+  // Importación en bloque de vecinos (archivo con muchos polígonos). Una sola
+  // actualización de estado para todos: con >1000 polígonos, llamar a
+  // handleImportNeighbors en bucle re-renderizaría el editor mil veces.
+  const handleImportNeighborsMany = (
+    items: { nombre: string; vertices: UTMCoordinate[] }[],
+  ) => {
+    setData((prev) => {
+      const usados = new Set(prev.contexto.vecinos.map((v) => v.id));
+      let n = prev.contexto.vecinos.length;
+      const nuevos: LoteVecino[] = items.map((it) => {
+        let id: string;
+        do {
+          n++;
+          id = `V${n}`;
+        } while (usados.has(id));
+        usados.add(id);
+        return {
+          id,
+          nombre: it.nombre,
+          codigo: it.nombre,
+          estado: "libre",
+          vertices: it.vertices.map((c, i) => ({
+            id: (i + 1).toString(),
+            x: c[0],
+            y: c[1],
+          })),
+        };
+      });
+      return {
+        ...prev,
+        contexto: {
+          ...prev.contexto,
+          vecinos: [...prev.contexto.vecinos, ...nuevos],
+        },
+      };
+    });
+  };
+
   const handleSaveNeighbor = (updatedNeighbor: LoteVecino) => {
     setData((prev) => ({
       ...prev,
@@ -3345,8 +3383,10 @@ export default function EditorPlanos() {
         isOpen={showNeighborsImportModal}
         onClose={() => setShowNeighborsImportModal(false)}
         onImport={handleImportNeighbors}
+        onImportMany={handleImportNeighborsMany}
+        referencia={data.vertices.map((v) => [v.x, v.y] as UTMCoordinate)}
         title="Importar Lote Vecino"
-        subtitle="Carga coordenadas UTM para agregar un nuevo colindante"
+        subtitle="Carga un archivo para agregar uno o varios colindantes"
       />
       <NeighborEditModal
         isOpen={!!selectedNeighbor}

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { Upload, FileText, AlertCircle, CheckCircle, X, Copy, Download } from 'lucide-react';
 import { EJEMPLOS_IMPORTACION, ejemploPorExtension } from '@/lib/editor/importExamples';
 import { medidasPoligono, autoIntersecta, type Punto } from '@/lib/editor/geometryChecks';
+import { seleccionarCercanos } from '@/lib/editor/vecinosSeleccion';
 
 interface ImportDataModalProps {
     isOpen: boolean;
@@ -14,9 +15,13 @@ interface ImportDataModalProps {
     onImport: (vertices: UTMCoordinate[]) => void;
     title?: string;
     subtitle?: string;
+    /** Si se pasa, un archivo con varios polígonos permite importarlos todos (o los cercanos). */
+    onImportMany?: (items: { nombre: string; vertices: UTMCoordinate[] }[]) => void;
+    /** Lote principal: permite filtrar los polígonos cercanos a él. */
+    referencia?: UTMCoordinate[];
 }
 
-export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle }: ImportDataModalProps) {
+export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle, onImportMany, referencia }: ImportDataModalProps) {
     const [isDragging, setIsDragging] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [importedData, setImportedData] = useState<{
@@ -29,6 +34,9 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle }: 
         candidatos?: { nombre: string; vertices: UTMCoordinate[] }[];
     } | null>(null);
     const [indice, setIndice] = useState(0);
+    // Importación en bloque (solo si el padre pasó onImportMany y el archivo trae varios polígonos)
+    const [modoMulti, setModoMulti] = useState<'uno' | 'todos' | 'cercanos'>('uno');
+    const [radio, setRadio] = useState(200);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     if (!isOpen) return null;
@@ -77,6 +85,9 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle }: 
 
             const validation = validateUTMCoordinates(result.vertices);
             setIndice(0);
+            // Con muchos polígonos y un lote de referencia, lo sensato es traer los cercanos;
+            // "Todos" queda a un clic y el botón dice cuántos se importan.
+            setModoMulti(onImportMany && referencia && (result.candidatos?.length ?? 0) > 50 ? 'cercanos' : 'uno');
             setImportedData({
                 vertices: result.vertices,
                 filename: file.name,
@@ -120,8 +131,29 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle }: 
               ]
             : [];
 
+    // Importación en bloque
+    const hayVarios = !!(onImportMany && importedData?.candidatos && importedData.candidatos.length > 1);
+    const todosLosPoligonos = hayVarios
+        ? importedData!.candidatos!.map((c) => ({ nombre: c.nombre, vertices: c.vertices }))
+        : [];
+    const cercanos = hayVarios && referencia
+        ? seleccionarCercanos(
+              todosLosPoligonos.map((c) => ({ nombre: c.nombre, vertices: c.vertices as Punto[] })),
+              referencia as Punto[],
+              radio,
+          )
+        : [];
+    const seleccionMulti = !hayVarios || modoMulti === 'uno' ? null : modoMulti === 'todos' ? todosLosPoligonos : cercanos;
+
     const handleUseData = () => {
         if (importedData) {
+            if (seleccionMulti && onImportMany) {
+                onImportMany(seleccionMulti as { nombre: string; vertices: UTMCoordinate[] }[]);
+                toast.success(`✅ ${seleccionMulti.length} polígonos importados como vecinos`);
+                setImportedData(null);
+                onClose();
+                return;
+            }
             onImport(actuales ?? importedData.vertices);
             setImportedData(null);
             onClose();
@@ -282,6 +314,42 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle }: 
                                 </div>
                             )}
 
+                            {hayVarios && (
+                                <fieldset className="border border-slate-200 rounded-xl p-3 space-y-2 text-xs">
+                                    <legend className="px-1 font-semibold text-slate-600">¿Qué importar?</legend>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="modoMulti" checked={modoMulti === 'uno'} onChange={() => setModoMulti('uno')} />
+                                        Solo el polígono elegido arriba
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="modoMulti" checked={modoMulti === 'todos'} onChange={() => setModoMulti('todos')} />
+                                        <span>Todos los polígonos <b>({todosLosPoligonos.length})</b></span>
+                                    </label>
+                                    <label className={`flex items-center gap-2 flex-wrap ${referencia ? 'cursor-pointer' : 'opacity-50'}`}>
+                                        <input type="radio" name="modoMulti" disabled={!referencia} checked={modoMulti === 'cercanos'} onChange={() => setModoMulti('cercanos')} />
+                                        <span>Solo los cercanos al lote, a menos de</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            step={10}
+                                            value={radio}
+                                            disabled={!referencia}
+                                            onChange={(e) => { setRadio(Math.max(0, Number(e.target.value) || 0)); setModoMulti('cercanos'); }}
+                                            className="w-20 px-2 py-1 border border-slate-200 rounded-md font-mono"
+                                        />
+                                        <span>m <b>({referencia ? cercanos.length : 0} polígonos)</b></span>
+                                    </label>
+                                    {seleccionMulti && seleccionMulti.length > 200 && (
+                                        <p className="text-amber-700">
+                                            ⚠️ Más de 200 vecinos vuelve lento el editor y los PDF; casi todos quedarán lejos del lote. Conviene limitar por distancia.
+                                        </p>
+                                    )}
+                                    {seleccionMulti && seleccionMulti.length === 0 && (
+                                        <p className="text-red-600">Ningún polígono cumple: aumenta el radio o elige «Todos».</p>
+                                    )}
+                                </fieldset>
+                            )}
+
                             {/* Vista previa del contorno: permite ver de inmediato un lote girado, cruzado o de otro lugar */}
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch">
                                 <div className="sm:col-span-2 border border-slate-200 rounded-xl bg-slate-50 p-2">
@@ -325,8 +393,8 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle }: 
                                 <button onClick={() => setImportedData(null)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                                     Descartar
                                 </button>
-                                <button onClick={handleUseData} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">
-                                    Confirmar e Importar
+                                <button onClick={handleUseData} disabled={!!seleccionMulti && seleccionMulti.length === 0} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {seleccionMulti ? `Importar ${seleccionMulti.length} polígonos` : 'Confirmar e Importar'}
                                 </button>
                             </div>
                         </div>
