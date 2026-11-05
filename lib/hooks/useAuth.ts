@@ -19,6 +19,24 @@ export interface AuthState {
   isLoading: boolean;
 }
 
+/**
+ * Un JWT vencido sigue en localStorage y el editor lo seguía mandando: el
+ * servidor respondía 401 y el usuario solo veía "Error al conectar con el
+ * servidor". Se lee `exp` del payload (solo para decidir si vale la pena
+ * seguir; la verificación real de la firma la hace el servidor).
+ */
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(
+      atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))
+    );
+    return typeof payload.exp === 'number' && Date.now() >= payload.exp * 1000;
+  } catch {
+    // Token ilegible: se trata como inválido.
+    return true;
+  }
+}
+
 export function useAuth() {
   const router = useRouter();
   const [authState, setAuthState] = useState<AuthState>({
@@ -37,7 +55,18 @@ export function useAuth() {
         const apiKey = localStorage.getItem('apiKey');
         const userStr = localStorage.getItem('user');
 
-        if (token && userStr) {
+        if (token && isTokenExpired(token)) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('apiKey');
+          localStorage.removeItem('user');
+          setAuthState({
+            user: null,
+            token: null,
+            apiKey: null,
+            isAuthenticated: false,
+            isLoading: false
+          });
+        } else if (token && userStr) {
           const user = JSON.parse(userStr);
           setAuthState({
             user,

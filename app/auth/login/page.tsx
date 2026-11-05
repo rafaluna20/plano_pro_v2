@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, Loader2, Mail, Lock } from 'lucide-react';
@@ -13,6 +13,15 @@ export default function LoginPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Se llega con ?expired=1 cuando el servidor rechazó el token (authFetch).
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [showRecoveryHelp, setShowRecoveryHelp] = useState(false);
+
+  useEffect(() => {
+    setSessionExpired(
+      new URLSearchParams(window.location.search).get('expired') === '1'
+    );
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -89,6 +98,16 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* Sesión vencida */}
+        {sessionExpired && !error && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800 font-medium">
+              Tu sesión venció. Vuelve a iniciar sesión para continuar.
+            </p>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -148,11 +167,17 @@ export default function LoginPage() {
             <button
               type="button"
               className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              onClick={() => alert('Funcionalidad de recuperación de contraseña próximamente')}
+              onClick={() => setShowRecoveryHelp((v) => !v)}
             >
               ¿Olvidaste tu contraseña?
             </button>
           </div>
+          {showRecoveryHelp && (
+            <p className="text-sm text-gray-700 bg-blue-50 border border-blue-100 rounded-lg p-3">
+              Pide a un administrador que restablezca tu contraseña. Te dará una
+              temporal y podrás usarla para entrar.
+            </p>
+          )}
 
           {/* Submit Button */}
           <button

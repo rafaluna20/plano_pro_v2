@@ -36,6 +36,7 @@ import proj4 from "proj4";
 import { Toaster, toast } from "react-hot-toast";
 import { UTMCoordinate } from "@/types/planos";
 import { getUtmProjString, DEFAULT_UTM_ZONE } from "@/lib/geometry/utmUtils";
+import { authFetch } from "@/lib/auth/authFetch";
 
 const LocationMap = dynamic(() => import("@/components/editor/LocationMap"), {
   ssr: false,
@@ -137,9 +138,26 @@ interface LoteAdyacente {
   vertices: Vertice[];
 }
 
+// Ubicación administrativa y documento del titular: obligatorios para exportar.
+// Antes el payload llevaba "Lima/Lima/Lima" y DNI "00000000" fijos, de modo que
+// un lote de otro distrito salía con datos falsos sin ningún aviso.
+interface UbicacionData {
+  departamento: string;
+  provincia: string;
+  distrito: string;
+  direccion: string;
+}
+type TipoDocumento = "DNI" | "RUC" | "CE" | "PAS";
+interface TitularDocData {
+  tipo: TipoDocumento;
+  numero: string;
+}
+
 interface LoteData {
   loteId: string;
   propietario: string;
+  titularDoc: TitularDocData;
+  ubicacion: UbicacionData;
   area: number;
   membrete: MembreteData;
   vertices: Vertice[];
@@ -154,16 +172,24 @@ interface LoteData {
   lotesAdyacentes: Partial<Record<Lado, LoteAdyacente>>;
 }
 
+const SESION_VENCIDA_MSG =
+  "Tu sesión venció. Abre /auth/login en otra pestaña, inicia sesión y vuelve a pulsar Exportar: lo que escribiste aquí no se pierde.";
+
 // --- ESTADO INICIAL ---
+// Los textos de identidad arrancan VACÍOS a propósito: el exportador exige
+// completarlos. La geometría del lote (4 vértices) es solo un marcador para que
+// el editor dibuje algo; validarAntesDeExportar() bloquea si sigue sin cambiar.
 const INITIAL_DATA: LoteData = {
-  loteId: "MZ-C-Lote14",
-  propietario: "Inversiones Santa Rosa S.A.C.",
+  loteId: "",
+  propietario: "",
+  titularDoc: { tipo: "DNI", numero: "" },
+  ubicacion: { departamento: "", provincia: "", distrito: "", direccion: "" },
   area: 0,
   membrete: {
-    proyecto: "Habilitación Urbana Los Cedros",
+    proyecto: "",
     plano: "Perimétrico y Ubicación",
-    profesional: "Ing. Juan Pérez",
-    registro: "CIP 123456",
+    profesional: "",
+    registro: "",
     fecha: new Date().toISOString().split("T")[0],
     lamina: "P-01",
     escala: "1/500",
@@ -179,236 +205,7 @@ const INITIAL_DATA: LoteData = {
   logoUrl:
     "https://ik.imagekit.io/m5f5k3axy/LOGO_LAYA.png?updatedAt=1762278469920",
   contexto: {
-    vecinos: [
-      {
-        id: "V1",
-        nombre: "Lote 14",
-        codigo: "MZ-C-Lote13",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284480.0, y: 8670120.0 },
-          { id: "B", x: 284500.0, y: 8670120.0 },
-          { id: "C", x: 284500.0, y: 8670100.0 },
-          { id: "D", x: 284480.0, y: 8670100.0 },
-        ],
-      },
-      {
-        id: "V2",
-        nombre: "Lote Norte 02",
-        codigo: "MZ-C-LoteN2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284500.0, y: 8670140.0 },
-          { id: "B", x: 284510.0, y: 8670140.0 },
-          { id: "C", x: 284510.0, y: 8670120.0 },
-          { id: "D", x: 284500.0, y: 8670120.0 },
-        ],
-      },
-      {
-        id: "V3",
-        nombre: "Lote Sur 02",
-        codigo: "MZ-C-LoteS2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284500.0, y: 8670060.0 },
-          { id: "B", x: 284510.0, y: 8670060.0 },
-          { id: "C", x: 284510.0, y: 8670040.0 },
-          { id: "D", x: 284500.0, y: 8670040.0 },
-        ],
-      },
-      {
-        id: "V4",
-        nombre: "Lote Este 02",
-        codigo: "MZ-C-LoteE2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284520.0, y: 8670100.0 },
-          { id: "B", x: 284530.0, y: 8670100.0 },
-          { id: "C", x: 284530.0, y: 8670080.0 },
-          { id: "D", x: 284520.0, y: 8670080.0 },
-        ],
-      },
-      {
-        id: "V5",
-        nombre: "Lote Oeste 02",
-        codigo: "MZ-C-LoteO2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284480.0, y: 8670100.0 },
-          { id: "B", x: 284490.0, y: 8670100.0 },
-          { id: "C", x: 284490.0, y: 8670080.0 },
-          { id: "D", x: 284480.0, y: 8670080.0 },
-        ],
-      },
-      {
-        id: "V6",
-        nombre: "Lote NE",
-        codigo: "MZ-C-LoteNE",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284510.0, y: 8670120.0 },
-          { id: "B", x: 284520.0, y: 8670120.0 },
-          { id: "C", x: 284520.0, y: 8670100.0 },
-          { id: "D", x: 284510.0, y: 8670100.0 },
-        ],
-      },
-      {
-        id: "V7",
-        nombre: "Lote NO",
-        codigo: "MZ-C-LoteNO",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284490.0, y: 8670120.0 },
-          { id: "B", x: 284500.0, y: 8670120.0 },
-          { id: "C", x: 284500.0, y: 8670100.0 },
-          { id: "D", x: 284490.0, y: 8670100.0 },
-        ],
-      },
-      {
-        id: "V8",
-        nombre: "Lote SE",
-        codigo: "MZ-C-LoteSE",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284510.0, y: 8670080.0 },
-          { id: "B", x: 284520.0, y: 8670080.0 },
-          { id: "C", x: 284520.0, y: 8670060.0 },
-          { id: "D", x: 284510.0, y: 8670060.0 },
-        ],
-      },
-      {
-        id: "V9",
-        nombre: "Lote SO",
-        codigo: "MZ-C-LoteSO",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284490.0, y: 8670080.0 },
-          { id: "B", x: 284500.0, y: 8670080.0 },
-          { id: "C", x: 284500.0, y: 8670060.0 },
-          { id: "D", x: 284490.0, y: 8670060.0 },
-        ],
-      },
-      {
-        id: "V10",
-        nombre: "Lote Norte 03",
-        codigo: "MZ-C-LoteN3",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284500.0, y: 8670160.0 },
-          { id: "B", x: 284510.0, y: 8670160.0 },
-          { id: "C", x: 284510.0, y: 8670140.0 },
-          { id: "D", x: 284500.0, y: 8670140.0 },
-        ],
-      },
-      {
-        id: "V11",
-        nombre: "Lote Sur 03",
-        codigo: "MZ-C-LoteS3",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284500.0, y: 8670040.0 },
-          { id: "B", x: 284510.0, y: 8670040.0 },
-          { id: "C", x: 284510.0, y: 8670020.0 },
-          { id: "D", x: 284500.0, y: 8670020.0 },
-        ],
-      },
-      {
-        id: "V12",
-        nombre: "Lote Este 03",
-        codigo: "MZ-C-LoteE3",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284530.0, y: 8670100.0 },
-          { id: "B", x: 284540.0, y: 8670100.0 },
-          { id: "C", x: 284540.0, y: 8670080.0 },
-          { id: "D", x: 284530.0, y: 8670080.0 },
-        ],
-      },
-      {
-        id: "V13",
-        nombre: "Lote Oeste 03",
-        codigo: "MZ-C-LoteO3",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284470.0, y: 8670100.0 },
-          { id: "B", x: 284480.0, y: 8670100.0 },
-          { id: "C", x: 284480.0, y: 8670080.0 },
-          { id: "D", x: 284470.0, y: 8670080.0 },
-        ],
-      },
-      {
-        id: "V14",
-        nombre: "Lote NE 02",
-        codigo: "MZ-C-LoteNE2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284520.0, y: 8670140.0 },
-          { id: "B", x: 284530.0, y: 8670140.0 },
-          { id: "C", x: 284530.0, y: 8670120.0 },
-          { id: "D", x: 284520.0, y: 8670120.0 },
-        ],
-      },
-      {
-        id: "V15",
-        nombre: "Lote NO 02",
-        codigo: "MZ-C-LoteNO2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284480.0, y: 8670140.0 },
-          { id: "B", x: 284490.0, y: 8670140.0 },
-          { id: "C", x: 284490.0, y: 8670120.0 },
-          { id: "D", x: 284480.0, y: 8670120.0 },
-        ],
-      },
-      {
-        id: "V16",
-        nombre: "Lote SE 02",
-        codigo: "MZ-C-LoteSE2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284520.0, y: 8670060.0 },
-          { id: "B", x: 284530.0, y: 8670060.0 },
-          { id: "C", x: 284530.0, y: 8670040.0 },
-          { id: "D", x: 284520.0, y: 8670040.0 },
-        ],
-      },
-      {
-        id: "V17",
-        nombre: "Lote SO 02",
-        codigo: "MZ-C-LoteSO2",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284480.0, y: 8670060.0 },
-          { id: "B", x: 284490.0, y: 8670060.0 },
-          { id: "C", x: 284490.0, y: 8670040.0 },
-          { id: "D", x: 284480.0, y: 8670040.0 },
-        ],
-      },
-      {
-        id: "V18",
-        nombre: "Lote EN",
-        codigo: "MZ-C-LoteEN",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284520.0, y: 8670120.0 },
-          { id: "B", x: 284530.0, y: 8670120.0 },
-          { id: "C", x: 284530.0, y: 8670100.0 },
-          { id: "D", x: 284520.0, y: 8670100.0 },
-        ],
-      },
-      {
-        id: "V19",
-        nombre: "Lote ON",
-        codigo: "MZ-C-LoteON",
-        estado: "libre",
-        vertices: [
-          { id: "A", x: 284470.0, y: 8670120.0 },
-          { id: "B", x: 284480.0, y: 8670120.0 },
-          { id: "C", x: 284480.0, y: 8670100.0 },
-          { id: "D", x: 284470.0, y: 8670100.0 },
-        ],
-      },
-    ],
+    vecinos: [],
   },
   config: {
     modoUbicacion: "vectorial",
@@ -418,53 +215,33 @@ const INITIAL_DATA: LoteData = {
       id: "ltn1",
       dimension: 0,
       estado: "libre",
-      lote: "Lote 01",
-      propietario: "Inversiones Santa Rosa S.A.C.",
-      vertices: [
-        { id: "A", x: 284500.0, y: 8670120.0 },
-        { id: "B", x: 284510.0, y: 8670120.0 },
-        { id: "C", x: 284510.0, y: 8670100.0 },
-        { id: "D", x: 284500.0, y: 8670100.0 },
-      ],
+      lote: "",
+      propietario: "",
+      vertices: [],
     },
     sur: {
       id: "ltn2",
       dimension: 0,
       estado: "libre",
-      lote: "Lote 03",
-      propietario: "Inversiones Santa Rosa S.A.C.",
-      vertices: [
-        { id: "A", x: 284500.0, y: 8670080.0 },
-        { id: "B", x: 284510.0, y: 8670080.0 },
-        { id: "C", x: 284510.0, y: 8670060.0 },
-        { id: "D", x: 284500.0, y: 8670060.0 },
-      ],
+      lote: "",
+      propietario: "",
+      vertices: [],
     },
     este: {
       id: "ltn3",
       dimension: 0,
       estado: "libre",
-      lote: "Lote 02",
-      propietario: "Inversiones Santa Rosa S.A.C.",
-      vertices: [
-        { id: "A", x: 284510.0, y: 8670100.0 },
-        { id: "B", x: 284520.0, y: 8670100.0 },
-        { id: "C", x: 284520.0, y: 8670080.0 },
-        { id: "D", x: 284510.0, y: 8670080.0 },
-      ],
+      lote: "",
+      propietario: "",
+      vertices: [],
     },
     oeste: {
       id: "ltn4",
       dimension: 0,
       estado: "libre",
-      lote: "Lote 04",
-      propietario: "Inversiones Santa Rosa S.A.C.",
-      vertices: [
-        { id: "A", x: 284490.0, y: 8670100.0 },
-        { id: "B", x: 284500.0, y: 8670100.0 },
-        { id: "C", x: 284500.0, y: 8670080.0 },
-        { id: "D", x: 284490.0, y: 8670080.0 },
-      ],
+      lote: "",
+      propietario: "",
+      vertices: [],
     },
   },
 };
@@ -1267,6 +1044,79 @@ export default function EditorPlanos() {
   const handleRootChange = (field: keyof LoteData, value: string) => {
     setData((prev) => ({ ...prev, [field]: value }));
   };
+  const handleUbicacionChange = (field: keyof UbicacionData, value: string) => {
+    setData((prev) => ({
+      ...prev,
+      ubicacion: { ...prev.ubicacion, [field]: value },
+    }));
+  };
+  const handleTitularDocChange = (
+    field: keyof TitularDocData,
+    value: string,
+  ) => {
+    setData((prev) => ({
+      ...prev,
+      titularDoc: { ...prev.titularDoc, [field]: value } as TitularDocData,
+    }));
+  };
+
+  // Colindantes que realmente tienen polígono. Los lados vacíos ({vertices: []})
+  // existen solo para que los inputs N/S/E/O tengan dónde escribir.
+  const adyacentesConGeometria = Object.values(data.lotesAdyacentes || {}).filter(
+    (a): a is NonNullable<typeof a> => !!a && (a.vertices?.length ?? 0) >= 3,
+  );
+
+  /**
+   * Compuerta previa a exportar (Exportar PDF e Impresión API). Devuelve true
+   * si se puede continuar; si no, avisa qué falta, y lleva a la pestaña donde
+   * se corrige. La vista previa NO pasa por aquí: sirve para ir armando.
+   */
+  const validarAntesDeExportar = (): boolean => {
+    type Falta = { texto: string; tab: typeof activeTab };
+    const faltan: Falta[] = [];
+
+    if (!data.loteId.trim())
+      faltan.push({ texto: "Código del lote", tab: "general" });
+    if (!data.propietario.trim())
+      faltan.push({ texto: "Propietario / titular", tab: "general" });
+
+    const num = data.titularDoc.numero.trim();
+    if (!num) {
+      faltan.push({ texto: "N° de documento del titular", tab: "membrete" });
+    } else if (data.titularDoc.tipo === "DNI" && !/^\d{8}$/.test(num)) {
+      faltan.push({ texto: "DNI inválido (deben ser 8 dígitos)", tab: "membrete" });
+    } else if (data.titularDoc.tipo === "RUC" && !/^\d{11}$/.test(num)) {
+      faltan.push({ texto: "RUC inválido (deben ser 11 dígitos)", tab: "membrete" });
+    }
+
+    if (!data.membrete.proyecto.trim())
+      faltan.push({ texto: "Nombre del proyecto", tab: "membrete" });
+    if (!data.ubicacion.departamento.trim())
+      faltan.push({ texto: "Departamento", tab: "membrete" });
+    if (!data.ubicacion.provincia.trim())
+      faltan.push({ texto: "Provincia", tab: "membrete" });
+    if (!data.ubicacion.distrito.trim())
+      faltan.push({ texto: "Distrito", tab: "membrete" });
+
+    // Los 4 vértices de arranque son un marcador, no un lote real.
+    if (
+      JSON.stringify(data.vertices) === JSON.stringify(INITIAL_DATA.vertices)
+    ) {
+      faltan.push({
+        texto: "Vértices del lote (siguen siendo los de ejemplo: impórtalos o edítalos)",
+        tab: "vertices",
+      });
+    }
+
+    if (faltan.length === 0) return true;
+
+    setActiveTab(faltan[0].tab);
+    toast.error(
+      `No se puede exportar. Falta:\n• ${faltan.map((f) => f.texto).join("\n• ")}`,
+      { duration: 8000, style: { whiteSpace: "pre-line" } },
+    );
+    return false;
+  };
   const handleVertexChange = (
     index: number,
     field: keyof Vertice,
@@ -1368,6 +1218,8 @@ export default function EditorPlanos() {
       return;
     }
 
+    if (!validarAntesDeExportar()) return;
+
     // Modo satelital: capturamos el mapa Leaflet en este momento si está
     // montado (vista en vivo); si no (ej. ya se abrió el preview de PDF
     // antes), reusamos la última captura guardada en satelliteUrl.
@@ -1392,17 +1244,23 @@ export default function EditorPlanos() {
     let currentToast = toast.loading("Generando PDF (Nativo)...");
 
     try {
-      const response = await fetch("/api/v1/planos/print", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+      const response = await authFetch(
+        "/api/v1/planos/print",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...data,
+            satelliteUrl: satelliteUrlToSend,
+          }),
         },
-        body: JSON.stringify({
-          ...data,
-          satelliteUrl: satelliteUrlToSend,
-        }),
-      });
+        { redirectOnUnauthorized: false },
+      );
+
+      if (response.status === 401) {
+        toast.error(SESION_VENCIDA_MSG, { id: currentToast, duration: 12000 });
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1438,6 +1296,8 @@ export default function EditorPlanos() {
       return;
     }
 
+    if (!validarAntesDeExportar()) return;
+
     setLoading(true);
 
     try {
@@ -1466,18 +1326,19 @@ export default function EditorPlanos() {
             comercial: {
               nombreComercial: `Lote ${loteMatch ? loteMatch[0] : data.loteId}`,
             },
+            // Datos reales del formulario (validarAntesDeExportar garantiza que
+            // departamento/provincia/distrito y documento no están vacíos).
             ubicacion: {
-              // direccion: data.colindantes.frente || "Sin dirección",
-              direccion: "Sin dirección",
-              distrito: "Lima",
-              provincia: "Lima",
-              departamento: "Lima",
+              direccion: data.ubicacion.direccion.trim() || "Sin dirección",
+              distrito: data.ubicacion.distrito.trim(),
+              provincia: data.ubicacion.provincia.trim(),
+              departamento: data.ubicacion.departamento.trim(),
             },
             titularidad: {
-              nombre: data.propietario || "Sin especificar",
+              nombre: data.propietario.trim(),
               documento: {
-                tipo: "DNI" as const,
-                numero: "00000000",
+                tipo: data.titularDoc.tipo,
+                numero: data.titularDoc.numero.trim(),
               },
             },
           },
@@ -1628,14 +1489,20 @@ export default function EditorPlanos() {
       console.log("📤 Enviando payload híbrido:", hybridPayload);
 
       // Enviar al nuevo endpoint híbrido
-      const response = await fetch("/api/v1/planos/generar-hibrido", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+      const response = await authFetch(
+        "/api/v1/planos/generar-hibrido",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(hybridPayload),
         },
-        body: JSON.stringify(hybridPayload),
-      });
+        { redirectOnUnauthorized: false },
+      );
+
+      if (response.status === 401) {
+        toast.error(SESION_VENCIDA_MSG, { duration: 12000 });
+        return;
+      }
 
       // Verificar si la respuesta es exitosa
       if (!response.ok) {
@@ -1911,9 +1778,83 @@ export default function EditorPlanos() {
                       <span className="font-bold">Nota:</span> Datos para el
                       cajetín oficial.
                     </div>
+                    <div className="space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">
+                        Ubicación y titular (obligatorio para exportar)
+                      </span>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            ["departamento", "Departamento"],
+                            ["provincia", "Provincia"],
+                            ["distrito", "Distrito"],
+                          ] as const
+                        ).map(([campo, etiqueta]) => (
+                          <div key={campo}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                              {etiqueta} <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={data.ubicacion[campo]}
+                              onChange={(e) =>
+                                handleUbicacionChange(campo, e.target.value)
+                              }
+                              className="w-full px-2 py-2 bg-white border border-slate-200 rounded-md text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Dirección (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={data.ubicacion.direccion}
+                          onChange={(e) =>
+                            handleUbicacionChange("direccion", e.target.value)
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-md text-sm"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">
+                            Documento titular
+                          </label>
+                          <select
+                            value={data.titularDoc.tipo}
+                            onChange={(e) =>
+                              handleTitularDocChange("tipo", e.target.value)
+                            }
+                            className="w-full px-2 py-2 bg-white border border-slate-200 rounded-md text-sm"
+                          >
+                            <option value="DNI">DNI</option>
+                            <option value="RUC">RUC</option>
+                            <option value="CE">CE</option>
+                            <option value="PAS">Pasaporte</option>
+                          </select>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">
+                            N° de documento <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={data.titularDoc.numero}
+                            onChange={(e) =>
+                              handleTitularDocChange("numero", e.target.value)
+                            }
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-md text-sm font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">
-                        Nombre del Proyecto
+                        Nombre del Proyecto <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -2806,14 +2747,10 @@ export default function EditorPlanos() {
                       >
                         <LocationMap
                           vertices={data.vertices}
-                          adyacentes={Object.values(data.lotesAdyacentes || {})
-                            .filter(
-                              (a): a is NonNullable<typeof a> => a !== null,
-                            )
-                            .map((a) => ({
-                              vertices: a.vertices,
-                              lote: a.lote,
-                            }))}
+                          adyacentes={adyacentesConGeometria.map((a) => ({
+                            vertices: a.vertices,
+                            lote: a.lote,
+                          }))}
                           contexto={data.contexto}
                           interactive={false}
                         />
@@ -3197,9 +3134,10 @@ export default function EditorPlanos() {
             <div className="flex-1">
               <LocationMap
                 vertices={data.vertices}
-                adyacentes={Object.values(data.lotesAdyacentes || {})
-                  .filter((a): a is NonNullable<typeof a> => a !== null)
-                  .map((a) => ({ vertices: a.vertices, lote: a.lote }))}
+                adyacentes={adyacentesConGeometria.map((a) => ({
+                  vertices: a.vertices,
+                  lote: a.lote,
+                }))}
                 contexto={data.contexto}
                 interactive={true}
               />
