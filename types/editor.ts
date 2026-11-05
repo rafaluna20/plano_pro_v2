@@ -185,6 +185,12 @@ export interface ImportResult {
   metadata?: Partial<LoteMetadata>;
   colindancias?: Colindancia[];
   error?: string;
+  /** Avisos informativos (no errores), p. ej. "convertido de lon/lat a UTM". */
+  notas?: string[];
+  /** Avisos de posible pérdida o duda sobre los datos (p. ej. líneas ignoradas). */
+  advertencias?: string[];
+  /** Si el archivo trae varios polígonos: todos, para que el usuario elija. */
+  candidatos?: { nombre: string; vertices: UTMCoordinate[] }[];
 }
 
 export interface ExportFormat {
