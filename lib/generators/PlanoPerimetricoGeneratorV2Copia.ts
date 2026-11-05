@@ -42,7 +42,8 @@ import type {
 import type { DatosProcesados } from "@/lib/services/PlanoDataProcessor";
 import type { ArcoMetadata } from "@/types/planos";
 import { muestrearArco } from "@/lib/geometry/arcoUtils";
-import { lineaProyectoCopia } from "./perfilDocumento";
+import { lineaProyectoCopia, esPredio } from "./perfilDocumento";
+import { rotuloPredioEnPlano } from "./membretePredio";
 
 // ============================================================================
 // TIPOS INTERNOS
@@ -1155,9 +1156,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
       (sum, l) => sum + parseFloat(l.longitudTexto),
       0,
     );
-    const loteText = loteProps.identificador.manzana
-      ? `LOTE ${loteProps.identificador.lote}`
-      : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase();
+    const loteText = esPredio((this.payload.configImpresion as any)?.perfil)
+      ? rotuloPredioEnPlano(loteProps.codigoInterno)
+      : loteProps.identificador.manzana
+        ? `LOTE ${loteProps.identificador.lote}`
+        : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase();
     const areaText = `A = ${this.datosProcesados.areaFinal.toFixed(2)} m²`;
     const perimText = `P = ${perimetroVisual.toFixed(2)} ml`;
 

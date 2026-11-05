@@ -247,6 +247,8 @@ export interface EstilosPlano {
 export interface ConfiguracionImpresion {
   /** Perfil de documento (undefined = HABILITACION_URBANA). Ver lib/generators/perfilDocumento.ts */
   perfil?: 'HABILITACION_URBANA' | 'PREDIO';
+  /** Profesional responsable (opcional); lo imprime el membrete del perfil PREDIO. */
+  profesional?: { nombre?: string; colegiatura?: string };
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;

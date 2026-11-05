@@ -38,6 +38,8 @@ import type { ArcoMetadata } from "@/types/planos";
 import { muestrearArco } from "@/lib/geometry/arcoUtils";
 import * as turf from "@turf/turf";
 import { drawCoordinatesTechnicalTable } from "./CoordinatesTable";
+import { esPredio } from "./perfilDocumento";
+import { filasMembretePredio, fechaPeru, rotuloPredioEnPlano } from "./membretePredio";
 
 // ============================================================================
 // TIPOS INTERNOS
@@ -332,7 +334,11 @@ export class PlanoPerimetricoGeneratorV2 {
 
     const titleBarHeight = LAYOUT.ALTURAS.HEADER;
     const ubicacionHeight = LAYOUT.ALTURAS.UBICACION;
-    const membreteHeight = LAYOUT.ALTURAS.MEMBRETE;
+    // El membrete de un PREDIO lleva 2 filas más (sistema de coordenadas y profesional): 7 filas
+    // de 10 mm. El de habilitación urbana no cambia.
+    const membreteHeight = esPredio(this.payload.configImpresion?.perfil)
+      ? LAYOUT.ALTURAS.MEMBRETE + 15
+      : LAYOUT.ALTURAS.MEMBRETE;
 
     const cuadroTecnicoHeight =
       pageHeight -
@@ -937,9 +943,11 @@ export class PlanoPerimetricoGeneratorV2 {
       // Sin número de lote (figura principal = matriz, no un lote vendible):
       // usa el nombre/urbanización en vez de "LOTE " en blanco.
       const identLabel = this.payload.loteObjetivo.properties.identificador;
-      const labelText = identLabel.manzana
-        ? `LOTE ${identLabel.lote}`
-        : (identLabel.urbanizacion || 'MATRIZ').toUpperCase();
+      const labelText = esPredio(this.payload.configImpresion?.perfil)
+        ? rotuloPredioEnPlano(this.payload.loteObjetivo.properties.codigoInterno)
+        : identLabel.manzana
+          ? `LOTE ${identLabel.lote}`
+          : (identLabel.urbanizacion || 'MATRIZ').toUpperCase();
       pdf.setFontSize(6);
       pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
       const labelWidth = pdf.getTextWidth(labelText);
@@ -1320,9 +1328,11 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setTextColor(0);
     pdf.text(
-      loteProps.identificador.manzana
-        ? `LOTE ${loteProps.identificador.lote}`
-        : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase(),
+      esPredio(this.payload.configImpresion?.perfil)
+        ? rotuloPredioEnPlano(loteProps.codigoInterno)
+        : loteProps.identificador.manzana
+          ? `LOTE ${loteProps.identificador.lote}`
+          : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase(),
       center.x,
       center.y - 2,
       { align: "center" },
@@ -1398,6 +1408,11 @@ export class PlanoPerimetricoGeneratorV2 {
     area: AreaDibujo,
     escala: string,
   ): Promise<void> {
+    if (esPredio(this.payload.configImpresion?.perfil)) {
+      await this.drawMembretePredio(pdf, area, escala);
+      return;
+    }
+
     const { x, y, width: w, height: h } = area;
     const { MEMBRETE } = PLANO_THEME;
 
@@ -1563,6 +1578,147 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.text(escala, startX, rowY5 + 8);
     pdf.text(new Date().toLocaleDateString(), midX, rowY5 + 8);
+  }
+
+  /**
+   * Membrete del plano perimétrico para el perfil PREDIO (7 filas): PREDIO, PROPIETARIO,
+   * UBICACIÓN (distrito, provincia, departamento), ÁREA/PERÍMETRO, ESCALA/FECHA, SISTEMA DE
+   * COORDENADAS y PROFESIONAL RESPONSABLE; y en la columna izquierda el logo y un recuadro de
+   * firma y sello. Sin "EMPRESA / ING." ni "Formato de impresión" sueltos: el formato va en
+   * la etiqueta de la escala. Función aparte para no tocar el membrete de habilitación urbana.
+   */
+  private async drawMembretePredio(
+    pdf: jsPDF,
+    area: AreaDibujo,
+    escala: string,
+  ): Promise<void> {
+    const { x, y, width: w, height: h } = area;
+    const { MEMBRETE } = PLANO_THEME;
+    const loteProps = this.payload.loteObjetivo.properties;
+    const cfg = this.payload.configImpresion;
+    const filas = filasMembretePredio({
+      denominacion: loteProps.codigoInterno,
+      sector: loteProps.identificador.urbanizacion,
+      propietario: loteProps.titularidad?.nombre,
+      direccion: loteProps.ubicacion?.direccion,
+      distrito: loteProps.ubicacion?.distrito,
+      provincia: loteProps.ubicacion?.provincia,
+      departamento: loteProps.ubicacion?.departamento,
+      zonaUTM: this.getZonaUTM(),
+      profesional: cfg?.profesional,
+      formatoPapel: cfg?.formatoPapel,
+    });
+
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
+    pdf.rect(x, y, w, h);
+
+    const colSplit = w * MEMBRETE.LOGO_COLUMN_PERCENT;
+    pdf.line(x + colSplit, y, x + colSplit, y + h);
+
+    // --- Columna izquierda: logo + recuadro de firma y sello ---
+    const logoBoxH = h * 0.36;
+    if (cfg?.logoUrl) {
+      try {
+        const res = await fetch(cfg.logoUrl);
+        if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+        const data = new Uint8Array(await res.arrayBuffer());
+        const format = (res.headers.get("content-type") || "").includes("png") ? "PNG" : "JPEG";
+        new CADDrawing(pdf).drawImageContained(data, format, x + 4, y + 2, colSplit - 8, logoBoxH - 4);
+      } catch (err) {
+        console.warn("Fallo al cargar logoUrl:", err);
+        this.drawLogoPlaceholder(pdf, x, y, colSplit, logoBoxH);
+      }
+    } else {
+      this.drawLogoPlaceholder(pdf, x, y, colSplit, logoBoxH);
+    }
+
+    const dimmed = parseInt(PLANO_THEME.COLORS.DIMMED.slice(1, 3), 16);
+    const gray = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
+
+    const firmaX = x + 3;
+    const firmaY = y + logoBoxH + 3;
+    const firmaW = colSplit - 6;
+    const firmaH = h - logoBoxH - 3 - 8;
+    pdf.setDrawColor(gray);
+    pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
+    pdf.setLineDashPattern([1, 1], 0);
+    pdf.rect(firmaX, firmaY, firmaW, firmaH);
+    pdf.setLineDashPattern([], 0);
+    pdf.setTextColor(dimmed);
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
+    pdf.text("FIRMA Y SELLO", x + colSplit / 2, y + h - 3, { align: "center" });
+
+    // --- Columna derecha: 7 filas ---
+    const startX = x + colSplit + MEMBRETE.PADDING_H;
+    const anchoUtil = w - colSplit - MEMBRETE.PADDING_H * 2;
+    const filasN = 7;
+    const lineHeight = h / filasN;
+    const midX = startX + 30;
+
+    const separador = (idx: number) => {
+      if (idx === 0) return;
+      pdf.setDrawColor(gray);
+      pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
+      pdf.line(x + colSplit, y + idx * lineHeight, x + w, y + idx * lineHeight);
+    };
+    const etiqueta = (txt: string, px: number, idx: number) => {
+      pdf.setTextColor(dimmed);
+      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
+      pdf.text(txt, px, y + idx * lineHeight + 3.5);
+    };
+    // Texto de una línea si cabe; si no, hasta DOS líneas más pequeñas. Antes (y en el
+    // membrete de habilitación urbana) un texto largo se achicaba y se cortaba con "...".
+    const filaSimple = (idx: number, label: string, valor: string) => {
+      separador(idx);
+      etiqueta(label, startX, idx);
+      const baseY = y + idx * lineHeight;
+      pdf.setTextColor(0);
+      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+      if (pdf.getTextWidth(valor) <= anchoUtil) {
+        pdf.text(valor, startX, baseY + 8);
+        return;
+      }
+      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
+      const lineas: string[] = pdf.splitTextToSize(valor, anchoUtil);
+      if (lineas.length > 2) {
+        // Aún no cabe en dos líneas: se corta la segunda con puntos suspensivos.
+        const resto = lineas.slice(1).join(" ");
+        let l2 = resto;
+        while (l2.length > 1 && pdf.getTextWidth(l2 + "...") > anchoUtil) l2 = l2.slice(0, -1);
+        lineas.splice(1, lineas.length - 1, l2 + "...");
+      }
+      pdf.text(lineas[0], startX, baseY + 6.3);
+      if (lineas[1]) pdf.text(lineas[1], startX, baseY + 9.2);
+    };
+    const valorNegrita = (txt: string, px: number, idx: number) => {
+      pdf.setTextColor(0);
+      pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+      pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+      pdf.text(txt, px, y + idx * lineHeight + 8);
+    };
+
+    filaSimple(0, "PREDIO:", filas.predio);
+    filaSimple(1, "PROPIETARIO:", filas.propietario);
+    filaSimple(2, "UBICACIÓN:", filas.ubicacion);
+
+    separador(3);
+    etiqueta("ÁREA:", startX, 3);
+    valorNegrita(`${this.datosProcesados.areaFinal.toFixed(2)} m²`, startX, 3);
+    etiqueta("PERÍMETRO:", midX, 3);
+    valorNegrita(`${this.datosProcesados.perimetroFinal.toFixed(2)} ml`, midX, 3);
+
+    separador(4);
+    etiqueta(filas.etiquetaEscala, startX, 4);
+    valorNegrita(escala, startX, 4);
+    etiqueta("FECHA:", midX, 4);
+    valorNegrita(fechaPeru(), midX, 4);
+
+    filaSimple(5, "SISTEMA DE COORDENADAS:", filas.sistema);
+    filaSimple(6, "PROFESIONAL RESPONSABLE:", filas.profesional);
   }
 
   private drawRealUTMGrid(

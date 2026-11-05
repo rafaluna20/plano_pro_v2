@@ -198,4 +198,27 @@ describe('construirPayloadExpediente', () => {
       expect(r.payload.lote.manzana).toBe('C');
     });
   });
+
+  describe('profesional responsable', () => {
+    it('viaja en config.profesional solo si el usuario escribió algo', () => {
+      const e = { ...base(), perfil: 'PREDIO' as const, profesional: { nombre: ' Ing. Ana Torres ', colegiatura: 'CIP 123456' } };
+      const r = construirPayloadExpediente(e);
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.config.profesional).toEqual({ nombre: 'Ing. Ana Torres', colegiatura: 'CIP 123456' });
+    });
+
+    it('sin datos no se envía un objeto vacío', () => {
+      const r = construirPayloadExpediente({ ...base(), perfil: 'PREDIO', profesional: { nombre: '  ', colegiatura: '' } });
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.config).not.toHaveProperty('profesional');
+    });
+
+    it('el esquema del servidor no lo descarta', () => {
+      const r = construirPayloadExpediente({ ...base(), perfil: 'PREDIO', profesional: { nombre: 'Ing. X', colegiatura: 'CIP 1' } });
+      if (!r.ok) throw new Error('debía ser ok');
+      const v = generarPlanosSchema.safeParse(r.payload);
+      expect(v.success, JSON.stringify(v.success ? '' : v.error.format())).toBe(true);
+      expect((v as any).data.config.profesional).toEqual({ nombre: 'Ing. X', colegiatura: 'CIP 1' });
+    });
+  });
 });

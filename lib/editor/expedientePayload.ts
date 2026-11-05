@@ -34,6 +34,8 @@ export interface VecinoEntrada {
 export interface EntradaExpediente {
   /** PREDIO (general) o HABILITACION_URBANA. Por defecto HABILITACION_URBANA. */
   perfil?: 'PREDIO' | 'HABILITACION_URBANA';
+  /** Profesional responsable (opcional): lo imprime el membrete del perfil PREDIO. */
+  profesional?: { nombre?: string; colegiatura?: string };
   loteId: string;
   propietario: string;
   titularDoc: { tipo: 'DNI' | 'RUC' | 'CE' | 'PAS'; numero: string };
@@ -85,7 +87,10 @@ export interface PayloadExpediente {
     longitud: number;
   }[];
   propietario: { nombre: string; dni?: string; ruc?: string };
-  config: { perfil: 'PREDIO' | 'HABILITACION_URBANA' };
+  config: {
+    perfil: 'PREDIO' | 'HABILITACION_URBANA';
+    profesional?: { nombre?: string; colegiatura?: string };
+  };
   contexto?: {
     elementos: {
       codigo: string;
@@ -268,7 +273,18 @@ export function construirPayloadExpediente(
     },
     colindancias,
     propietario,
-    config: { perfil: esPredio ? 'PREDIO' : 'HABILITACION_URBANA' },
+    config: {
+      perfil: esPredio ? 'PREDIO' : 'HABILITACION_URBANA',
+      // Solo se envía si el usuario escribió algo (nada de objetos vacíos).
+      ...(e.profesional?.nombre?.trim() || e.profesional?.colegiatura?.trim()
+        ? {
+            profesional: {
+              ...(e.profesional?.nombre?.trim() ? { nombre: e.profesional.nombre.trim() } : {}),
+              ...(e.profesional?.colegiatura?.trim() ? { colegiatura: e.profesional.colegiatura.trim() } : {}),
+            },
+          }
+        : {}),
+    },
     ...(elementos.length ? { contexto: { elementos } } : {}),
   };
 

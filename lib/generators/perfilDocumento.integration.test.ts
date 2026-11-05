@@ -63,7 +63,7 @@ function medidas(c: [number, number][]) {
   return { area: Math.abs(s) / 2, perimetro: per, frente: Math.max(...lados) };
 }
 
-async function textosDe(clave: string, ub: any, perfil?: string): Promise<string[]> {
+async function textosDe(clave: string, ub: any, perfil?: string, extra: { config?: any; crudo?: boolean } = {}): Promise<string[]> {
   const f = LOTES[clave];
   const m = medidas(f.vertices);
   capturados.textos.length = 0;
@@ -77,9 +77,10 @@ async function textosDe(clave: string, ub: any, perfil?: string): Promise<string
     colindancias: [{ lado: 'norte', tipo: 'lote', nombre: 'Lote 01', longitud: 10 }, { lado: 'sur', tipo: 'calle', nombre: 'Calle 2', longitud: 10 }],
     propietario: { nombre: 'Titular de Prueba SAC', ruc: '20123456789' },
     // Logo inalcanzable: sin red; el generador cae a su texto alternativo.
-    config: { incluirMemoriaDescriptiva: true, incluirPlanoPerimetrico: true, incluirPlanoUbicacion: true, logoUrl: 'http://127.0.0.1:9/sin-logo.png', ...(perfil ? { perfil } : {}) },
+    config: { incluirMemoriaDescriptiva: true, incluirPlanoPerimetrico: true, incluirPlanoUbicacion: true, logoUrl: 'http://127.0.0.1:9/sin-logo.png', ...(perfil ? { perfil } : {}), ...(extra.config ?? {}) },
   };
   await new PlanoGenerator(request).generate();
+  if (extra.crudo) return [...capturados.textos];
   // Cambian en cada corrida: la fecha de hoy (en cualquiera de sus formatos) y el código de documento (DOC-<código>-<marca de tiempo>).
   return capturados.textos.filter(
     (t) => !/\d{1,2} de [a-záéíóú]+ de \d{4}/i.test(t) && !/\d{1,2}\/\d{1,2}\/\d{4}/.test(t) && !/^DOC-.+-[A-Z0-9]{6,}$/.test(t),
@@ -150,5 +151,52 @@ describe('textos con el perfil PREDIO (predio general)', () => {
   it('el texto de generalidades habla del predio, no del proyecto inmobiliario', async () => {
     const texto = (await textosDe('rect', undefined, 'PREDIO')).join(' ');
     expect(texto).toContain('describir técnicamente el predio');
+  }, 60000);
+});
+
+describe('membrete del plano perimétrico con el perfil PREDIO', () => {
+  const UB = { departamento: 'Ica', provincia: 'Ica', distrito: 'Subtanjalla', urbanizacion: 'Sector Los Olivos', direccion: 'Km 12 Panamericana Sur' };
+  const PROF = { profesional: { nombre: 'Ing. Ana Torres Ríos', colegiatura: 'CIP 123456' } };
+
+  it('imprime los campos nuevos: ubicación completa, sistema de coordenadas, profesional y firma', async () => {
+    const t = await textosDe('rect', UB, 'PREDIO', { config: PROF, crudo: true });
+    for (const esperado of ['PREDIO:', 'PROPIETARIO:', 'UBICACIÓN:', 'SISTEMA DE COORDENADAS:', 'PROFESIONAL RESPONSABLE:', 'FIRMA Y SELLO', 'ESCALA (A3):']) {
+      expect(t, esperado).toContain(esperado);
+    }
+    // La ubicación larga puede ocupar dos líneas: se comprueba el contenido, no el corte.
+    const i = t.indexOf('UBICACIÓN:');
+    const ubicacion = t.slice(i + 1, i + 3).join(' ');
+    for (const parte of ['Km 12 Panamericana Sur', 'Sector Los Olivos', 'Subtanjalla']) expect(ubicacion).toContain(parte);
+    expect(t).toContain('UTM WGS84 - zona 18S');
+    expect(t).toContain('Ing. Ana Torres Ríos - CIP 123456');
+    expect(t).toContain('Titular de Prueba SAC');
+  }, 60000);
+
+  it('la fecha sale dd/mm/aaaa (día primero), no el formato de EE. UU.', async () => {
+    const t = await textosDe('rect', UB, 'PREDIO', { config: PROF, crudo: true });
+    const hoy = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric' })
+      .formatToParts(new Date()).reduce((a: any, p) => ({ ...a, [p.type]: p.value }), {});
+    expect(t).toContain(`${hoy.day}/${hoy.month}/${hoy.year}`);
+  }, 60000);
+
+  it('sin profesional dice "No consta", no queda en blanco', async () => {
+    const t = await textosDe('rect', UB, 'PREDIO', { crudo: true });
+    const i = t.indexOf('PROFESIONAL RESPONSABLE:');
+    expect(i).toBeGreaterThan(-1);
+    expect(t[i + 1]).toBe('No consta');
+  }, 60000);
+
+  it('quita lo de relleno: "EMPRESA / ING.", "Formato de impresión", "MATRIZ" y "LOTE n"', async () => {
+    const t = await textosDe('rect', undefined, 'PREDIO', { config: PROF, crudo: true });
+    expect(t.filter((x) => /EMPRESA \/ ING|Formato de impresi|MATRIZ/i.test(x) || /^LOTE\s/.test(x))).toEqual([]);
+    expect(t).toContain('PREDIO RECT'); // rótulo dentro del dibujo: la denominación del predio
+  }, 60000);
+
+  it('el membrete de habilitación urbana NO cambia: sigue con sus textos de siempre', async () => {
+    const t = await textosDe('rect', UB, undefined, { crudo: true });
+    expect(t).toContain('EMPRESA / ING.');
+    expect(t.some((x) => /^Formato de impresi/.test(x))).toBe(true);
+    expect(t).not.toContain('FIRMA Y SELLO');
+    expect(t).not.toContain('PROFESIONAL RESPONSABLE:');
   }, 60000);
 });

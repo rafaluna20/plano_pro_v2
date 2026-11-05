@@ -1442,6 +1442,7 @@ export default function EditorPlanos() {
 
     const construido = construirPayloadExpediente({
       perfil: data.tipoDocumento,
+      profesional: { nombre: data.membrete.profesional, colegiatura: data.membrete.registro },
       loteId: data.loteId,
       propietario: data.propietario,
       titularDoc: data.titularDoc,
@@ -1735,6 +1736,12 @@ export default function EditorPlanos() {
 
         // Configuración de impresión
         configImpresion: {
+          // Perfil y profesional: el membrete de un PREDIO los imprime (ver perfilDocumento.ts).
+          perfil: data.tipoDocumento,
+          profesional: {
+            nombre: data.membrete.profesional.trim() || undefined,
+            colegiatura: data.membrete.registro.trim() || undefined,
+          },
           formatoPapel: "a3" as const,
           orientacion: "landscape" as const,
           incluirNorte: true,

@@ -223,6 +223,7 @@ export class PlanoRequestAdapter {
         return {
             // undefined = HABILITACION_URBANA (comportamiento de siempre)
             perfil: config?.perfil,
+            profesional: config?.profesional,
             incluirMemoriaDescriptiva: config?.incluirMemoriaDescriptiva ?? true,
             incluirPlanoPerimetrico: config?.incluirPlanoPerimetrico ?? true,
             incluirPlanoUbicacion: config?.incluirPlanoUbicacion ?? true,

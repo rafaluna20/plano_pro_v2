@@ -96,6 +96,10 @@ export const loteMetadataSchema = z.object({
 export const planoConfigSchema = z.object({
   // Si no se declara aquí, zod descarta el campo en silencio y el generador nunca lo ve.
   perfil: z.enum(['HABILITACION_URBANA', 'PREDIO']).optional(),
+  // Igual que `perfil`: si no se declara, zod lo descarta en silencio.
+  profesional: z
+    .object({ nombre: z.string().max(200).optional(), colegiatura: z.string().max(100).optional() })
+    .optional(),
   incluirMemoriaDescriptiva: z.boolean().default(true),
   incluirPlanoPerimetrico: z.boolean().default(true),
   incluirPlanoUbicacion: z.boolean().default(true),

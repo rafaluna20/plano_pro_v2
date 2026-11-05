@@ -70,8 +70,16 @@ export interface LoteMetadata {
 // (predio en general, sin proyecto/manzana/lote). Ver lib/generators/perfilDocumento.ts.
 export type PerfilDocumento = 'HABILITACION_URBANA' | 'PREDIO';
 
+// Profesional que firma el plano (opcional). Se imprime en el membrete del perfil PREDIO.
+export interface ProfesionalResponsable {
+  nombre?: string;
+  /** Colegiatura tal como se escribe, p. ej. "CIP 123456". */
+  colegiatura?: string;
+}
+
 export interface PlanoConfig {
   perfil?: PerfilDocumento;
+  profesional?: ProfesionalResponsable;
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;
