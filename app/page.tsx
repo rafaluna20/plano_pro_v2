@@ -2424,7 +2424,11 @@ export default function EditorPlanos() {
                               <div className="flex justify-between items-center mb-1">
                                 <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
                                   <div className="w-2 h-2 rounded-full bg-slate-300 group-hover:bg-blue-500"></div>
-                                  {vecino.nombre}
+                                  {vecino.nombre || (
+                                    <span className="italic font-normal text-slate-400">
+                                      (sin nombre)
+                                    </span>
+                                  )}
                                 </span>
                                 <code className="text-[10px] text-slate-400 bg-slate-50 px-1 rounded">
                                   {vecino.id}

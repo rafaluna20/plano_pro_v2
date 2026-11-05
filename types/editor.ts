@@ -189,6 +189,8 @@ export interface ImportResult {
   notas?: string[];
   /** Avisos de posible pérdida o duda sobre los datos (p. ej. líneas ignoradas). */
   advertencias?: string[];
+  /** Nombre del polígono tal como viene en el archivo (vacío si no trae). Nunca se inventa. */
+  nombre?: string;
   /** Si el archivo trae varios polígonos: todos, para que el usuario elija. */
   candidatos?: { nombre: string; vertices: UTMCoordinate[] }[];
 }

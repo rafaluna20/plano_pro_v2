@@ -235,3 +235,58 @@ describe('validateUTMCoordinates', () => {
     expect(v.warnings.length).toBe(2); // uno de X y uno de Y
   });
 });
+
+describe('el nombre es el del archivo; nunca se inventa "Polígono N"', () => {
+  const rect = (x0: number) => [[x0, 8670100], [x0 + 10, 8670100], [x0 + 10, 8670080], [x0, 8670080], [x0, 8670100]];
+  const fc = (props: any[]) =>
+    JSON.stringify({ type: 'FeatureCollection', features: props.map((p, i) => ({ type: 'Feature', ...(p === undefined ? {} : { properties: p }), geometry: { type: 'Polygon', coordinates: [rect(284500 + i * 20)] } })) });
+
+  it('tu caso: "nombre": "" en cada polígono -> los tres quedan con nombre vacío', () => {
+    const r = parseGeoJSON(fc([{ nombre: '' }, { nombre: '' }, { nombre: '' }]));
+    expect(r.success, r.error).toBe(true);
+    expect(r.candidatos!.map((c) => c.nombre)).toEqual(['', '', '']);
+  });
+
+  it('sin propiedades o sin campo de nombre: vacío, no "Polígono N"', () => {
+    const r = parseGeoJSON(fc([undefined, {}, { otro: 'x' }]));
+    expect(r.candidatos!.map((c) => c.nombre)).toEqual(['', '', '']);
+  });
+
+  it('un nombre real se respeta tal cual (recortando espacios)', () => {
+    const r = parseGeoJSON(fc([{ nombre: '  Lote 5 ' }, { name: 'Calle 2' }]));
+    expect(r.candidatos!.map((c) => c.nombre)).toEqual(['Lote 5', 'Calle 2']);
+  });
+
+  it('si no hay campo de nombre pero hay id/código, se usa ese identificador', () => {
+    const r = parseGeoJSON(fc([{ id: 'A12' }, { codigo: 'B7' }]));
+    expect(r.candidatos!.map((c) => c.nombre)).toEqual(['A12', 'B7']);
+  });
+
+  it('si el campo de nombre existe y está vacío, manda el vacío aunque haya un id', () => {
+    const r = parseGeoJSON(fc([{ nombre: '', id: 'A12' }, { nombre: 'X' }]));
+    expect(r.candidatos![0].nombre).toBe('');
+  });
+
+  it('un MultiPolygon sin nombre no inventa nombres de partes', () => {
+    const r = parseGeoJSON(
+      JSON.stringify({ type: 'Feature', properties: { nombre: '' }, geometry: { type: 'MultiPolygon', coordinates: [[rect(284500)], [rect(284520)]] } }),
+    );
+    expect(r.candidatos!.map((c) => c.nombre)).toEqual(['', '']);
+  });
+
+  it('un MultiPolygon con nombre sí numera sus partes', () => {
+    const r = parseGeoJSON(
+      JSON.stringify({ type: 'Feature', properties: { nombre: 'Manzana A' }, geometry: { type: 'MultiPolygon', coordinates: [[rect(284500)], [rect(284520)]] } }),
+    );
+    expect(r.candidatos!.map((c) => c.nombre)).toEqual(['Manzana A (parte 1)', 'Manzana A (parte 2)']);
+  });
+
+  it('un polígono único expone su nombre (vacío o no) para el importador', () => {
+    expect(parseGeoJSON(JSON.stringify({ type: 'Feature', properties: { nombre: '' }, geometry: { type: 'Polygon', coordinates: [rect(284500)] } })).nombre).toBe('');
+    expect(parseGeoJSON(JSON.stringify({ type: 'Feature', properties: { nombre: 'Lote X' }, geometry: { type: 'Polygon', coordinates: [rect(284500)] } })).nombre).toBe('Lote X');
+  });
+
+  it('una geometría suelta (sin Feature) no tiene nombre', () => {
+    expect(parseGeoJSON(JSON.stringify({ type: 'Polygon', coordinates: [rect(284500)] })).nombre).toBe('');
+  });
+});

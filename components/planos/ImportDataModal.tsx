@@ -27,6 +27,8 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle, on
     const [importedData, setImportedData] = useState<{
         vertices: UTMCoordinate[];
         filename: string;
+        /** Nombre del polígono tal como viene en el archivo (puede estar vacío). */
+        nombre: string;
         /** Avisos del lector (líneas ignoradas, varios polígonos...). */
         advertencias: string[];
         notas: string[];
@@ -91,6 +93,7 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle, on
             setImportedData({
                 vertices: result.vertices,
                 filename: file.name,
+                nombre: result.nombre ?? '',
                 advertencias: result.advertencias ?? [],
                 notas: result.notas ?? [],
                 candidatos: result.candidatos,
@@ -147,9 +150,18 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle, on
 
     const handleUseData = () => {
         if (importedData) {
-            if (seleccionMulti && onImportMany) {
-                onImportMany(seleccionMulti as { nombre: string; vertices: UTMCoordinate[] }[]);
-                toast.success(`✅ ${seleccionMulti.length} polígonos importados como vecinos`);
+            if (onImportMany) {
+                // Con importación en bloque disponible, TODO pasa por ahí (también un solo
+                // polígono) para conservar el nombre del archivo, vacío incluido, en vez de
+                // que el editor invente "Lote Vecino N".
+                const items = (seleccionMulti as { nombre: string; vertices: UTMCoordinate[] }[] | null) ?? [
+                    {
+                        nombre: importedData.candidatos?.[indice]?.nombre ?? importedData.nombre,
+                        vertices: actuales ?? importedData.vertices,
+                    },
+                ];
+                onImportMany(items);
+                toast.success(items.length === 1 ? '✅ Polígono importado como vecino' : `✅ ${items.length} polígonos importados como vecinos`);
                 setImportedData(null);
                 onClose();
                 return;
@@ -307,7 +319,8 @@ export function ImportDataModal({ isOpen, onClose, onImport, title, subtitle, on
                                     >
                                         {importedData.candidatos.map((c, i) => (
                                             <option key={i} value={i}>
-                                                {c.nombre} ({c.vertices.length} vértices)
+                                                {/* Solo la etiqueta de la lista: el nombre guardado sigue siendo el del archivo */}
+                                                {c.nombre ? c.nombre : `Sin nombre · n.º ${i + 1}`} ({c.vertices.length} vértices)
                                             </option>
                                         ))}
                                     </select>

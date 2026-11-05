@@ -299,14 +299,23 @@ function finalizarCandidatos(candidatos: Candidato[], formato: string): ImportRe
   return {
     success: true,
     vertices: final[0].vertices,
+    nombre: final[0].nombre,
     ...(final.length > 1 ? { candidatos: final } : {}),
     ...(notas.length ? { notas } : {}),
   };
 }
 
-const nombreDe = (props: any, i: number): string => {
-  const n = props && (props.name ?? props.nombre ?? props.Name ?? props.id ?? props.codigo ?? props.lote);
-  return n !== undefined && n !== null && String(n).trim() ? String(n).trim() : `Polígono ${i + 1}`;
+/**
+ * Nombre del polígono TAL COMO VIENE en el archivo. Si el campo de nombre existe pero está
+ * vacío (`"nombre": ""`), se respeta el vacío: antes se reemplazaba por "Polígono 1", un
+ * dato inventado que el usuario tenía que borrar a mano. Solo si no hay ningún campo de
+ * nombre se mira id/codigo/lote; y si tampoco, queda vacío.
+ */
+const nombreDe = (props: any): string => {
+  if (!props) return '';
+  const definido = (v: unknown) => v !== undefined && v !== null;
+  const n = [props.name, props.nombre, props.Name].find(definido) ?? [props.id, props.codigo, props.lote].find(definido);
+  return definido(n) ? String(n).trim() : '';
 };
 
 /** Recorre una geometría GeoJSON y devuelve los contornos que contiene. */
@@ -318,7 +327,7 @@ function contornosDeGeometria(geom: any, nombre: string, salida: Candidato[]): v
       break;
     case 'MultiPolygon':
       (geom.coordinates || []).forEach((poly: number[][][], i: number) => {
-        if (poly?.[0]) salida.push({ nombre: `${nombre} (parte ${i + 1})`, coords: poly[0] });
+        if (poly?.[0]) salida.push({ nombre: nombre ? `${nombre} (parte ${i + 1})` : '', coords: poly[0] });
       });
       break;
     case 'LineString':
@@ -327,7 +336,7 @@ function contornosDeGeometria(geom: any, nombre: string, salida: Candidato[]): v
       break;
     case 'MultiLineString':
       (geom.coordinates || []).forEach((l: number[][], i: number) =>
-        salida.push({ nombre: `${nombre} (línea ${i + 1})`, coords: l }),
+        salida.push({ nombre: nombre ? `${nombre} (línea ${i + 1})` : '', coords: l }),
       );
       break;
     case 'GeometryCollection':
@@ -351,18 +360,18 @@ export function parseGeoJSON(content: string): ImportResult {
       // juntos, en orden, como UN contorno.
       if (features.every((f) => f?.geometry?.type === 'Point')) {
         candidatos.push({
-          nombre: 'Puntos del archivo',
+          nombre: '',
           coords: features.map((f) => f.geometry.coordinates),
         });
       } else {
-        features.forEach((f, i) => contornosDeGeometria(f?.geometry, nombreDe(f?.properties, i), candidatos));
+        features.forEach((f) => contornosDeGeometria(f?.geometry, nombreDe(f?.properties), candidatos));
       }
     } else if (gj.type === 'Feature') {
-      contornosDeGeometria(gj.geometry, nombreDe(gj.properties, 0), candidatos);
+      contornosDeGeometria(gj.geometry, nombreDe(gj.properties), candidatos);
     } else if (
       ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString', 'MultiPoint', 'GeometryCollection'].includes(gj.type)
     ) {
-      contornosDeGeometria(gj, 'Polígono 1', candidatos);
+      contornosDeGeometria(gj, '', candidatos);
     } else {
       return { success: false, error: `Tipo de GeoJSON no soportado: ${gj.type}` };
     }
@@ -397,21 +406,18 @@ export function parseKML(content: string): ImportResult {
       return { success: false, error: 'El archivo no es un XML/KML válido.' };
     }
 
-    const nombreKml = (el: Element, i: number) => {
-      const placemark = el.closest('Placemark');
-      const n = placemark?.querySelector('name')?.textContent?.trim();
-      return n || `Polígono ${i + 1}`;
-    };
+    // Nombre del Placemark tal cual; vacío si no lo trae (no se inventa "Polígono N").
+    const nombreKml = (el: Element) => el.closest('Placemark')?.querySelector('name')?.textContent?.trim() ?? '';
 
     const candidatos: Candidato[] = [];
-    xml.querySelectorAll('Polygon').forEach((poly, i) => {
+    xml.querySelectorAll('Polygon').forEach((poly) => {
       const c = poly.querySelector('outerBoundaryIs coordinates') ?? poly.querySelector('coordinates');
-      if (c?.textContent) candidatos.push({ nombre: nombreKml(poly, i), coords: coordenadasKml(c.textContent) });
+      if (c?.textContent) candidatos.push({ nombre: nombreKml(poly), coords: coordenadasKml(c.textContent) });
     });
     if (candidatos.length === 0) {
-      xml.querySelectorAll('LineString').forEach((ls, i) => {
+      xml.querySelectorAll('LineString').forEach((ls) => {
         const c = ls.querySelector('coordinates');
-        if (c?.textContent) candidatos.push({ nombre: nombreKml(ls, i), coords: coordenadasKml(c.textContent) });
+        if (c?.textContent) candidatos.push({ nombre: nombreKml(ls), coords: coordenadasKml(c.textContent) });
       });
     }
     if (candidatos.length === 0) {
@@ -420,7 +426,7 @@ export function parseKML(content: string): ImportResult {
       xml.querySelectorAll('Point coordinates').forEach((c) => {
         if (c.textContent) puntos.push(...coordenadasKml(c.textContent).slice(0, 1));
       });
-      if (puntos.length > 0) candidatos.push({ nombre: 'Puntos del archivo', coords: puntos });
+      if (puntos.length > 0) candidatos.push({ nombre: '', coords: puntos });
     }
     if (candidatos.length === 0) {
       return { success: false, error: 'No se encontraron polígonos, líneas ni puntos con coordenadas en el KML.' };
