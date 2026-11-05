@@ -6,6 +6,7 @@ import { calculateCentroid, utmToLatLng, getBoundingBox, DEFAULT_UTM_ZONE } from
 import { utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { MapService } from '@/lib/services/MapService';
 import { PLANO_THEME } from '@/lib/config/PlanoTheme';
+import { cajetinUbicacion } from './perfilDocumento';
 
 /**
  * Generador de Plano de Ubicación Profesional
@@ -515,9 +516,10 @@ export class PlanoUbicacionGenerator {
       pdf.text('PLANO', x + leftW / 2, y + 20, { align: 'center' });
       pdf.text('UBICACIÓN', x + leftW / 2, y + 28, { align: 'center' });
     }
+    const cajetin = cajetinUbicacion((this.config as any)?.perfil, lote);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('TERRA LIMA', x + leftW / 2, y + logoBoxH + 11, { align: 'center' });
+    if (cajetin.marca) pdf.text(cajetin.marca, x + leftW / 2, y + logoBoxH + 11, { align: 'center' });
 
     // Formato de impresión: la "ESC:" que se imprime abajo del membrete solo
     // es correcta si el plano se imprime a este tamaño exacto de papel.
@@ -542,14 +544,13 @@ export class PlanoUbicacionGenerator {
     pdf.text(`DIRECCIÓN DEL PREDIO:`, infoX, lineY);
     pdf.setFont('helvetica', 'normal');
     // Usar dirección compuesta si existe, sino armarla
-    const dir = lote.ubicacion?.direccion || `Mz. ${lote.manzana} Lote ${lote.numeroLote}`;
-    pdf.text(dir, infoX, lineY + 4);
+    pdf.text(cajetin.direccion, infoX, lineY + 4);
     
     lineY += 12;
     pdf.setFont('helvetica', 'bold');
-    pdf.text(`PROYECTO:`, infoX, lineY);
+    pdf.text(cajetin.proyectoLabel, infoX, lineY);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(lote.etapa || 'Habilitación Urbana', infoX, lineY + 4);
+    pdf.text(cajetin.proyectoValor, infoX, lineY + 4);
 
     // Pie
     const footerY = y + h - 10;

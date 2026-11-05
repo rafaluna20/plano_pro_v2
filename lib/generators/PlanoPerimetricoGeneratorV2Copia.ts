@@ -42,6 +42,7 @@ import type {
 import type { DatosProcesados } from "@/lib/services/PlanoDataProcessor";
 import type { ArcoMetadata } from "@/types/planos";
 import { muestrearArco } from "@/lib/geometry/arcoUtils";
+import { lineaProyectoCopia } from "./perfilDocumento";
 
 // ============================================================================
 // TIPOS INTERNOS
@@ -1470,9 +1471,11 @@ export class PlanoPerimetricoGeneratorV2Copia {
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.text(
-      `PROYECTO: HABILITACIÓN URBANA "${
-        loteProps.identificador.urbanizacion || "TERRA LIMA"
-      }"`,
+      lineaProyectoCopia(
+        (this.payload.configImpresion as any)?.perfil,
+        loteProps.identificador.urbanizacion,
+        loteProps.codigoInterno,
+      ),
       x + w / 2,
       cy + proyectoH / 2 + 1.5,
       { align: "center" },

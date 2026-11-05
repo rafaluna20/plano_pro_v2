@@ -153,4 +153,49 @@ describe('construirPayloadExpediente', () => {
     const v = generarPlanosSchema.safeParse(r.payload);
     expect(v.success, JSON.stringify(v.success ? '' : v.error.format())).toBe(true);
   });
+
+  describe('perfil PREDIO (predio general)', () => {
+    const predio = (): EntradaExpediente => ({ ...base(), perfil: 'PREDIO', loteId: 'Fundo La Esperanza - Parcela 05', proyecto: '' });
+
+    it('no deduce manzana ni lote del nombre del predio, y la denominación es lo escrito', () => {
+      const r = construirPayloadExpediente(predio());
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.lote.manzana).toBe('');
+      expect(r.payload.lote.numeroLote).toBe('');
+      expect(r.payload.lote.nombre).toBe('Fundo La Esperanza - Parcela 05');
+      expect(r.advertencias.join(' ')).not.toContain('manzana');
+    });
+
+    it('sin sector no envía urbanización (no se inventa)', () => {
+      const r = construirPayloadExpediente(predio());
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.lote.ubicacion).not.toHaveProperty('urbanizacion');
+      expect(r.payload.lote.ubicacion.zonaUTM).toBe(18);
+    });
+
+    it('con sector, lo envía tal cual', () => {
+      const e = predio();
+      e.proyecto = 'Sector Los Olivos';
+      const r = construirPayloadExpediente(e);
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.lote.ubicacion.urbanizacion).toBe('Sector Los Olivos');
+    });
+
+    it('manda config.perfil = PREDIO, y el esquema del servidor lo acepta (no lo descarta)', () => {
+      const r = construirPayloadExpediente(predio());
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.config).toEqual({ perfil: 'PREDIO' });
+      const v = generarPlanosSchema.safeParse(r.payload);
+      expect(v.success, JSON.stringify(v.success ? '' : v.error.format())).toBe(true);
+      // zod descarta en silencio lo que no declara: si el esquema no tuviera `perfil`, se perdería aquí.
+      expect((v as any).data.config.perfil).toBe('PREDIO');
+    });
+
+    it('el perfil por defecto sigue siendo habilitación urbana', () => {
+      const r = construirPayloadExpediente(base());
+      if (!r.ok) throw new Error('debía ser ok');
+      expect(r.payload.config).toEqual({ perfil: 'HABILITACION_URBANA' });
+      expect(r.payload.lote.manzana).toBe('C');
+    });
+  });
 });

@@ -154,7 +154,14 @@ interface TitularDocData {
   numero: string;
 }
 
+// Tipo de documento: PREDIO (predio en general: sin proyecto, manzana ni lote) o
+// HABILITACION_URBANA (lote de un proyecto, como el que genera mapa_renasur). Decide los
+// textos de la memoria y de los planos (lib/generators/perfilDocumento.ts). OJO con el
+// nombre: /print esparce `...data` sobre las props de PlanoDocument.
+type TipoDePlano = "PREDIO" | "HABILITACION_URBANA";
+
 interface LoteData {
+  tipoDocumento: TipoDePlano;
   loteId: string;
   propietario: string;
   titularDoc: TitularDocData;
@@ -184,6 +191,7 @@ const SESION_VENCIDA_MSG =
 // completarlos. La geometría del lote (4 vértices) es solo un marcador para que
 // el editor dibuje algo; validarAntesDeExportar() bloquea si sigue sin cambiar.
 const INITIAL_DATA: LoteData = {
+  tipoDocumento: "PREDIO",
   loteId: "",
   propietario: "",
   titularDoc: { tipo: "DNI", numero: "" },
@@ -1170,7 +1178,7 @@ export default function EditorPlanos() {
       faltan.push({ texto: "RUC inválido (deben ser 11 dígitos)", tab: "membrete" });
     }
 
-    if (!data.membrete.proyecto.trim())
+    if (data.tipoDocumento === "HABILITACION_URBANA" && !data.membrete.proyecto.trim())
       faltan.push({ texto: "Nombre del proyecto", tab: "membrete" });
     if (!data.ubicacionLote.departamento.trim())
       faltan.push({ texto: "Departamento", tab: "membrete" });
@@ -1433,6 +1441,7 @@ export default function EditorPlanos() {
     if (!validarAntesDeExportar()) return;
 
     const construido = construirPayloadExpediente({
+      perfil: data.tipoDocumento,
       loteId: data.loteId,
       propietario: data.propietario,
       titularDoc: data.titularDoc,
@@ -1556,6 +1565,7 @@ export default function EditorPlanos() {
       // Extraer parte numérica del loteId
       const loteMatch = data.loteId.match(/\d+/);
       const manzanaMatch = data.loteId.match(/MZ-([A-Z])/i);
+      const esPredioGeneral = data.tipoDocumento === "PREDIO";
 
       // Construir payload en formato híbrido (PlanoPayloadHibrido)
       const hybridPayload = {
@@ -1571,12 +1581,13 @@ export default function EditorPlanos() {
           type: "Feature" as const,
           properties: {
             identificador: {
-              manzana: manzanaMatch ? manzanaMatch[1] : "A",
-              lote: loteMatch ? loteMatch[0] : "01",
-              urbanizacion: data.membrete.proyecto || "Urbanización",
+              // En un predio general no hay manzana ni lote: vacío, no "A"/"01" inventados.
+              manzana: esPredioGeneral ? "" : manzanaMatch ? manzanaMatch[1] : "A",
+              lote: esPredioGeneral ? "" : loteMatch ? loteMatch[0] : "01",
+              urbanizacion: esPredioGeneral ? data.membrete.proyecto.trim() : data.membrete.proyecto || "Urbanización",
             },
             comercial: {
-              nombreComercial: `Lote ${loteMatch ? loteMatch[0] : data.loteId}`,
+              nombreComercial: esPredioGeneral ? data.loteId.trim() : `Lote ${loteMatch ? loteMatch[0] : data.loteId}`,
             },
             // Datos reales del formulario (validarAntesDeExportar garantiza que
             // departamento/provincia/distrito y documento no están vacíos).
@@ -1932,7 +1943,7 @@ export default function EditorPlanos() {
                       </h3>
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1">
-                          Código Lote
+                          {data.tipoDocumento === "PREDIO" ? "Código o denominación del predio" : "Código Lote"}
                         </label>
                         <input
                           type="text"
@@ -2041,6 +2052,29 @@ export default function EditorPlanos() {
                       <span className="font-bold">Nota:</span> Datos para el
                       cajetín oficial.
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        Tipo de documento
+                      </label>
+                      <select
+                        value={data.tipoDocumento}
+                        onChange={(e) =>
+                          setData((prev) => ({
+                            ...prev,
+                            tipoDocumento: e.target.value as TipoDePlano,
+                          }))
+                        }
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm"
+                      >
+                        <option value="PREDIO">Predio (en general)</option>
+                        <option value="HABILITACION_URBANA">Lote de habilitación urbana (proyecto)</option>
+                      </select>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {data.tipoDocumento === "PREDIO"
+                          ? "Sin proyecto, manzana ni lote: los datos que falten se imprimen como «No consta»."
+                          : "Documento de un lote dentro de un proyecto (manzana, lote, etapa)."}
+                      </p>
+                    </div>
                     <div className="space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
                       <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">
                         Ubicación y titular (obligatorio para exportar)
@@ -2117,7 +2151,13 @@ export default function EditorPlanos() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">
-                        Nombre del Proyecto <span className="text-red-500">*</span>
+                        {data.tipoDocumento === "PREDIO" ? (
+                          "Sector / urbanización (opcional)"
+                        ) : (
+                          <>
+                            Nombre del Proyecto <span className="text-red-500">*</span>
+                          </>
+                        )}
                       </label>
                       <input
                         type="text"

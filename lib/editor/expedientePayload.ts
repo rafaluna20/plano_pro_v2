@@ -32,6 +32,8 @@ export interface VecinoEntrada {
 }
 
 export interface EntradaExpediente {
+  /** PREDIO (general) o HABILITACION_URBANA. Por defecto HABILITACION_URBANA. */
+  perfil?: 'PREDIO' | 'HABILITACION_URBANA';
   loteId: string;
   propietario: string;
   titularDoc: { tipo: 'DNI' | 'RUC' | 'CE' | 'PAS'; numero: string };
@@ -70,8 +72,9 @@ export interface PayloadExpediente {
       departamento: string;
       provincia: string;
       distrito: string;
-      urbanizacion: string;
+      urbanizacion?: string;
       direccion?: string;
+      zonaUTM?: number;
     };
   };
   colindancias: {
@@ -82,6 +85,7 @@ export interface PayloadExpediente {
     longitud: number;
   }[];
   propietario: { nombre: string; dni?: string; ruc?: string };
+  config: { perfil: 'PREDIO' | 'HABILITACION_URBANA' };
   contexto?: {
     elementos: {
       codigo: string;
@@ -208,10 +212,13 @@ export function construirPayloadExpediente(
   };
 
   // --- Identificación del lote ---
+  const esPredio = e.perfil === 'PREDIO';
   const codigo = e.loteId.trim();
-  const manzana = codigo.match(/MZ-?([A-Z0-9]+?)(?:-|LOTE|L\b|\d|$)/i)?.[1] ?? '';
-  const numeroLote = codigo.match(/(\d+)\D*$/)?.[1] ?? '';
-  if (!manzana || !numeroLote)
+  // Un predio general no tiene manzana ni lote: no se deducen del código (un "05" al final
+  // del nombre de un predio no es un número de lote).
+  const manzana = esPredio ? '' : (codigo.match(/MZ-?([A-Z0-9]+?)(?:-|LOTE|L\b|\d|$)/i)?.[1] ?? '');
+  const numeroLote = esPredio ? '' : (codigo.match(/(\d+)\D*$/)?.[1] ?? '');
+  if (!esPredio && (!manzana || !numeroLote))
     advertencias.push(
       'No pude leer la manzana y/o el número de lote del código; esos campos saldrán en blanco en los documentos.',
     );
@@ -243,7 +250,8 @@ export function construirPayloadExpediente(
     dimensiones,
     lote: {
       codigo,
-      nombre: numeroLote ? `Lote ${numeroLote}` : codigo,
+      // Predio: la denominación es lo que el usuario escribió, tal cual.
+      nombre: esPredio ? codigo : numeroLote ? `Lote ${numeroLote}` : codigo,
       manzana,
       etapa: '',
       numeroLote,
@@ -252,12 +260,15 @@ export function construirPayloadExpediente(
         departamento: e.ubicacion.departamento.trim(),
         provincia: e.ubicacion.provincia.trim(),
         distrito: e.ubicacion.distrito.trim(),
-        urbanizacion: e.proyecto.trim(),
+        // Sector/urbanización: opcional en un predio; solo se envía si el usuario lo escribió.
+        ...(e.proyecto.trim() ? { urbanizacion: e.proyecto.trim() } : {}),
         ...(direccion ? { direccion } : {}),
+        zonaUTM: 18, // el editor trabaja solo en UTM zona 18S
       },
     },
     colindancias,
     propietario,
+    config: { perfil: esPredio ? 'PREDIO' : 'HABILITACION_URBANA' },
     ...(elementos.length ? { contexto: { elementos } } : {}),
   };
 

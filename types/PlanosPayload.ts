@@ -245,6 +245,8 @@ export interface EstilosPlano {
  * Configuración de generación de documentos
  */
 export interface ConfiguracionImpresion {
+  /** Perfil de documento (undefined = HABILITACION_URBANA). Ver lib/generators/perfilDocumento.ts */
+  perfil?: 'HABILITACION_URBANA' | 'PREDIO';
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;

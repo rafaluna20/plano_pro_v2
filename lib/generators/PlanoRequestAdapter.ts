@@ -221,6 +221,8 @@ export class PlanoRequestAdapter {
 
     private static mapConfig(config?: Partial<PlanoConfig>): any {
         return {
+            // undefined = HABILITACION_URBANA (comportamiento de siempre)
+            perfil: config?.perfil,
             incluirMemoriaDescriptiva: config?.incluirMemoriaDescriptiva ?? true,
             incluirPlanoPerimetrico: config?.incluirPlanoPerimetrico ?? true,
             incluirPlanoUbicacion: config?.incluirPlanoUbicacion ?? true,

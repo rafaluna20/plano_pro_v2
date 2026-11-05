@@ -66,7 +66,12 @@ export interface LoteMetadata {
   };
 }
 
+// Perfil de documento: HABILITACION_URBANA (por defecto, lo que usa mapa_renasur) o PREDIO
+// (predio en general, sin proyecto/manzana/lote). Ver lib/generators/perfilDocumento.ts.
+export type PerfilDocumento = 'HABILITACION_URBANA' | 'PREDIO';
+
 export interface PlanoConfig {
+  perfil?: PerfilDocumento;
   incluirMemoriaDescriptiva: boolean;
   incluirPlanoPerimetrico: boolean;
   incluirPlanoUbicacion: boolean;

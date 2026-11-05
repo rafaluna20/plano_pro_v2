@@ -4,6 +4,7 @@ import { DatosProcesados } from '@/lib/services/PlanoDataProcessor';
 import { CADDrawing } from '@/lib/geometry/cadDrawing';
 import { drawCoordinatesTechnicalTable } from './CoordinatesTable';
 import { fraseColindancia } from './linderoTexto';
+import { textoGeneralidades, filasIdentificacion, encabezadoMemoria } from './perfilDocumento';
 
 /**
  * Generador de Memoria Descriptiva - Proyecto Terra Lima
@@ -87,7 +88,7 @@ export class MemoriaDescriptivaGenerator {
     y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'I. GENERALIDADES', y);
     
-    const generalText = `La presente Memoria Descriptiva tiene por objeto describir técnica y legalmente el lote de terreno urbano, delimitando sus linderos y medidas perimétricas, así como su ubicación y área, el cual forma parte del proyecto inmobiliario "TERRA LIMA".`;
+    const generalText = textoGeneralidades(this.config.perfil);
     y = this.drawJustifiedText(pdf, generalText, y);
     y += this.SECTION_GAP;
 
@@ -95,17 +96,7 @@ export class MemoriaDescriptivaGenerator {
     y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'II. IDENTIFICACIÓN Y UBICACIÓN DEL PREDIO', y);
 
-    const ubicacionData = [
-      { label: 'PROYECTO', value: 'TERRA LIMA' },
-      { label: 'ETAPA', value: lote.etapa || '---' },
-      { label: 'MANZANA', value: lote.manzana },
-      { label: 'LOTE', value: lote.numeroLote },
-      { label: 'CÓDIGO INTERNO', value: lote.codigo },
-      { label: 'DEPARTAMENTO', value: lote.ubicacion?.departamento || '---' },
-      { label: 'PROVINCIA', value: lote.ubicacion?.provincia || '---' },
-      { label: 'DISTRITO', value: lote.ubicacion?.distrito || '---' },
-      { label: 'DIRECCIÓN', value: lote.ubicacion?.direccion || `Mz. ${lote.manzana} Lote ${lote.numeroLote}` },
-    ];
+    const ubicacionData = filasIdentificacion(this.config.perfil, lote);
 
     y = this.drawDataGrid(pdf, ubicacionData, y);
     y += this.SECTION_GAP;
@@ -310,18 +301,26 @@ export class MemoriaDescriptivaGenerator {
       }
     }
 
-    if (!logoDrawn) {
+    const encabezado = encabezadoMemoria(
+      this.config.perfil,
+      lote,
+      new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' }),
+    );
+
+    if (!logoDrawn && encabezado.logoAlternativo) {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(18);
       pdf.setTextColor(r, g, b);
-      pdf.text('TERRA', logoCenterX, 28, { align: 'center' });
-      pdf.text('LIMA', logoCenterX, 36, { align: 'center' });
+      pdf.text(encabezado.logoAlternativo[0], logoCenterX, 28, { align: 'center' });
+      pdf.text(encabezado.logoAlternativo[1], logoCenterX, 36, { align: 'center' });
     }
 
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(r, g, b);
-    pdf.text('Desarrollo Inmobiliario', logoCenterX, 42, { align: 'center' });
+    if (encabezado.subtituloLogo) {
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(r, g, b);
+      pdf.text(encabezado.subtituloLogo, logoCenterX, 42, { align: 'center' });
+    }
 
     // DATOS DEL DOCUMENTO (Lado Derecho)
     const dataX = splitX + 5;
@@ -329,12 +328,7 @@ export class MemoriaDescriptivaGenerator {
 
     pdf.setFontSize(9);
 
-    const headerData = [
-      { l: 'PROYECTO:', v: 'TERRA LIMA' },
-      { l: 'DOCUMENTO:', v: 'MEMORIA DESCRIPTIVA' },
-      { l: 'CÓDIGO:', v: lote.codigo || '---' },
-      { l: 'FECHA:', v: new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' }) }
-    ];
+    const headerData = encabezado.filas;
 
     // Color fijado explícitamente en cada línea (no heredado de una llamada
     // anterior): label en el gris corporativo, valor en negro puro para
