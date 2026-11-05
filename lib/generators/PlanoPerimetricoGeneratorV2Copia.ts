@@ -1157,7 +1157,7 @@ export class PlanoPerimetricoGeneratorV2Copia {
       0,
     );
     const loteText = esPredio((this.payload.configImpresion as any)?.perfil)
-      ? rotuloPredioEnPlano(loteProps.codigoInterno)
+      ? rotuloPredioEnPlano(loteProps.codigoInterno, loteProps.identificador.urbanizacion)
       : loteProps.identificador.manzana
         ? `LOTE ${loteProps.identificador.lote}`
         : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase();

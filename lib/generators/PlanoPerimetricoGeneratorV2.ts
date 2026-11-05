@@ -950,7 +950,10 @@ export class PlanoPerimetricoGeneratorV2 {
       // usa el nombre/urbanización en vez de "LOTE " en blanco.
       const identLabel = this.payload.loteObjetivo.properties.identificador;
       const labelText = esPredio(this.payload.configImpresion?.perfil)
-        ? rotuloPredioEnPlano(this.payload.loteObjetivo.properties.codigoInterno)
+        ? rotuloPredioEnPlano(
+            this.payload.loteObjetivo.properties.codigoInterno,
+            this.payload.loteObjetivo.properties.identificador.urbanizacion,
+          )
         : identLabel.manzana
           ? `LOTE ${identLabel.lote}`
           : (identLabel.urbanizacion || 'MATRIZ').toUpperCase();
@@ -1316,33 +1319,45 @@ export class PlanoPerimetricoGeneratorV2 {
   ): void {
     const { ETIQUETA_CENTRAL } = PLANO_THEME;
     const center = this.calculatePoleOfInaccessibility(paperPoints);
+    const loteProps = this.payload.loteObjetivo.properties;
+    const predio = esPredio(this.payload.configImpresion?.perfil);
+
+    const textoRotulo = predio
+      ? rotuloPredioEnPlano(loteProps.codigoInterno, loteProps.identificador.urbanizacion)
+      : loteProps.identificador.manzana
+        ? `LOTE ${loteProps.identificador.lote}`
+        : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase();
+
+    // Un predio lleva su nombre, que puede ser largo: la caja crece con el texto (hasta 80 mm) y,
+    // si aun así no cabe, se achica la letra. El rótulo de habilitación urbana no cambia.
+    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
+    const anchoCaja = predio
+      ? Math.min(Math.max(ETIQUETA_CENTRAL.WIDTH, pdf.getTextWidth(textoRotulo) + 6), 80)
+      : ETIQUETA_CENTRAL.WIDTH;
+    let tamRotulo: number = PLANO_THEME.FONTS.SIZES.BODY;
+    if (predio) {
+      while (pdf.getTextWidth(textoRotulo) > anchoCaja - 4 && tamRotulo > PLANO_THEME.FONTS.SIZES.TINY) {
+        tamRotulo -= 0.5;
+        pdf.setFontSize(tamRotulo);
+      }
+    }
 
     pdf.setFillColor(255, 255, 255);
     pdf.setDrawColor(0);
     pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
     pdf.rect(
-      center.x - ETIQUETA_CENTRAL.WIDTH / 2,
+      center.x - anchoCaja / 2,
       center.y - ETIQUETA_CENTRAL.HEIGHT / 2,
-      ETIQUETA_CENTRAL.WIDTH,
+      anchoCaja,
       ETIQUETA_CENTRAL.HEIGHT,
       "FD",
     );
 
-    const loteProps = this.payload.loteObjetivo.properties;
-
-    pdf.setFontSize(PLANO_THEME.FONTS.SIZES.BODY);
+    pdf.setFontSize(tamRotulo);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.BOLD);
     pdf.setTextColor(0);
-    pdf.text(
-      esPredio(this.payload.configImpresion?.perfil)
-        ? rotuloPredioEnPlano(loteProps.codigoInterno)
-        : loteProps.identificador.manzana
-          ? `LOTE ${loteProps.identificador.lote}`
-          : (loteProps.identificador.urbanizacion || 'MATRIZ').toUpperCase(),
-      center.x,
-      center.y - 2,
-      { align: "center" },
-    );
+    pdf.text(textoRotulo, center.x, center.y - 2, { align: "center" });
 
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);
     pdf.setFont(PLANO_THEME.FONTS.MAIN, PLANO_THEME.FONTS.WEIGHTS.NORMAL);
@@ -1589,8 +1604,8 @@ export class PlanoPerimetricoGeneratorV2 {
   /**
    * Membrete del plano perimétrico para el perfil PREDIO (7 filas): PREDIO, PROPIETARIO,
    * UBICACIÓN (hasta 3 líneas), ÁREA/PERÍMETRO, ESCALA (formato)/FECHA, SISTEMA DE COORDENADAS
-   * y PROFESIONAL RESPONSABLE. El logo ocupa toda la columna izquierda (no hay recuadro de
-   * firma: ocupaba demasiado espacio). Letras un 10 % más pequeñas que en el membrete de
+   * y PROFESIONAL RESPONSABLE. Sin logo ni recuadro de firma (ocupaban demasiado espacio): los
+   * datos usan todo el ancho del membrete. Letras un 10 % más pequeñas que en el membrete de
    * habilitación urbana. Función aparte para no tocar ese membrete.
    */
   private async drawMembretePredio(
@@ -1604,7 +1619,7 @@ export class PlanoPerimetricoGeneratorV2 {
     const cfg = this.payload.configImpresion;
     const filas = filasMembretePredio({
       denominacion: loteProps.codigoInterno,
-      sector: loteProps.identificador.urbanizacion,
+      proyecto: loteProps.identificador.urbanizacion,
       propietario: loteProps.titularidad?.nombre,
       direccion: loteProps.ubicacion?.direccion,
       distrito: loteProps.ubicacion?.distrito,
@@ -1619,34 +1634,14 @@ export class PlanoPerimetricoGeneratorV2 {
     pdf.setLineWidth(PLANO_THEME.STROKES.FRAME_INNER);
     pdf.rect(x, y, w, h);
 
-    const colSplit = w * MEMBRETE.LOGO_COLUMN_PERCENT;
-    pdf.line(x + colSplit, y, x + colSplit, y + h);
-
-    // --- Columna izquierda: el logo, centrado en toda la altura ---
-    if (cfg?.logoUrl) {
-      try {
-        const res = await fetch(cfg.logoUrl);
-        if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
-        const data = new Uint8Array(await res.arrayBuffer());
-        const format = (res.headers.get("content-type") || "").includes("png") ? "PNG" : "JPEG";
-        new CADDrawing(pdf).drawImageContained(data, format, x + 4, y + 4, colSplit - 8, h - 8);
-      } catch (err) {
-        console.warn("Fallo al cargar logoUrl:", err);
-        this.drawLogoPlaceholder(pdf, x, y, colSplit, h);
-      }
-    } else {
-      this.drawLogoPlaceholder(pdf, x, y, colSplit, h);
-    }
-
-    // --- Columna derecha: 7 filas de altura propia ---
+    // --- 7 filas de altura propia, a todo el ancho ---
     const F = MEMBRETE_PREDIO.FACTOR_FUENTE;
     const tamEtiqueta = FONTS.SIZES.SMALL * F;
     const tamValor = FONTS.SIZES.BODY * F;
     const dimmed = parseInt(PLANO_THEME.COLORS.DIMMED.slice(1, 3), 16);
     const gray = parseInt(PLANO_THEME.COLORS.GRID_LINE.slice(1, 3), 16);
-    const startX = x + colSplit + MEMBRETE.PADDING_H;
-    const anchoUtil = w - colSplit - MEMBRETE.PADDING_H * 2;
-    const midX = startX + 30;
+    const startX = x + MEMBRETE.PADDING_H;
+    const anchoUtil = w - MEMBRETE.PADDING_H * 2;
 
     const tops: number[] = [];
     MEMBRETE_PREDIO.FILAS_MM.reduce((acc, alto) => {
@@ -1658,67 +1653,91 @@ export class PlanoPerimetricoGeneratorV2 {
       if (idx === 0) return;
       pdf.setDrawColor(gray);
       pdf.setLineWidth(PLANO_THEME.STROKES.GRID);
-      pdf.line(x + colSplit, tops[idx], x + w, tops[idx]);
+      pdf.line(x, tops[idx], x + w, tops[idx]);
     };
     const etiqueta = (txt: string, px: number, idx: number) => {
       pdf.setTextColor(dimmed);
       pdf.setFontSize(tamEtiqueta);
       pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.NORMAL);
-      pdf.text(txt, px, tops[idx] + 3.1);
+      pdf.text(txt, px, tops[idx] + 3.4);
     };
-    const valorNegrita = (txt: string, px: number, idx: number) => {
+    // Una línea; si no cabe en `ancho`, se achica (como el resto del plano) hasta el tamaño mínimo.
+    const valor = (txt: string, px: number, idx: number, ancho: number) => {
       pdf.setTextColor(0);
-      pdf.setFontSize(tamValor);
-      pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.BOLD);
-      pdf.text(txt, px, tops[idx] + 7.1);
+      this.drawTextAutoFit(pdf, txt, px, tops[idx] + 7.6, ancho, tamValor);
     };
-    // Una línea; si no cabe, se achica (como el resto del plano) hasta el tamaño mínimo.
-    const filaSimple = (idx: number, label: string, valor: string) => {
+    const filaSimple = (idx: number, label: string, txt: string) => {
+      separador(idx);
+      etiqueta(label, startX, idx);
+      valor(txt, startX, idx, anchoUtil);
+    };
+    // Etiqueta y valor en la MISMA línea ("PROYECTO: Saneamiento físico legal"), en una fila baja.
+    const filaEnLinea = (idx: number, label: string, txt: string) => {
+      separador(idx);
+      const base = tops[idx] + MEMBRETE_PREDIO.FILAS_MM[idx] / 2 + 1.1;
+      pdf.setTextColor(dimmed);
+      pdf.setFontSize(tamEtiqueta);
+      pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.NORMAL);
+      pdf.text(label, startX, base);
+      const dx = pdf.getTextWidth(label) + 2;
+      pdf.setTextColor(0);
+      this.drawTextAutoFit(pdf, txt, startX + dx, base, anchoUtil - dx, tamValor);
+    };
+    // Varias columnas en una misma fila: [etiqueta, valor] por columna; `pesos` reparte el ancho
+    // (por defecto, columnas iguales).
+    const filaColumnas = (idx: number, columnas: [string, string][], pesos?: number[]) => {
+      separador(idx);
+      const p = pesos ?? columnas.map(() => 1);
+      const suma = p.reduce((a, b) => a + b, 0);
+      let px = startX;
+      columnas.forEach(([label, txt], k) => {
+        const ancho = (anchoUtil * p[k]) / suma;
+        etiqueta(label, px, idx);
+        valor(txt, px, idx, ancho - MEMBRETE.PADDING_H);
+        px += ancho;
+      });
+    };
+    // Texto largo (ubicación): una línea si cabe; si no, hasta N líneas. Solo si ni así cabe se corta,
+    // y la última línea termina en "...".
+    const filaMultilinea = (idx: number, label: string, txt: string, maxLineas: number) => {
       separador(idx);
       etiqueta(label, startX, idx);
       pdf.setTextColor(0);
-      this.drawTextAutoFit(pdf, valor, startX, tops[idx] + 7.1, anchoUtil, tamValor);
-    };
-    // Texto largo (ubicación): una línea si cabe; si no, hasta N líneas pequeñas. Solo si ni así
-    // cabe se corta, y la última línea termina en "...".
-    const filaMultilinea = (idx: number, label: string, valor: string, maxLineas: number) => {
-      separador(idx);
-      etiqueta(label, startX, idx);
-      pdf.setTextColor(0);
       pdf.setFont(FONTS.MAIN, FONTS.WEIGHTS.BOLD);
       pdf.setFontSize(tamValor);
-      if (pdf.getTextWidth(valor) <= anchoUtil) {
-        pdf.text(valor, startX, tops[idx] + 7.1);
+      if (pdf.getTextWidth(txt) <= anchoUtil) {
+        pdf.text(txt, startX, tops[idx] + 7.6);
         return;
       }
       pdf.setFontSize(tamEtiqueta);
-      let lineas: string[] = pdf.splitTextToSize(valor, anchoUtil);
+      let lineas: string[] = pdf.splitTextToSize(txt, anchoUtil);
       if (lineas.length > maxLineas) {
         const resto = lineas.slice(maxLineas - 1).join(" ");
         let ultima = resto;
         while (ultima.length > 1 && pdf.getTextWidth(ultima + "...") > anchoUtil) ultima = ultima.slice(0, -1);
         lineas = [...lineas.slice(0, maxLineas - 1), ultima + "..."];
       }
-      lineas.forEach((l, k) => pdf.text(l, startX, tops[idx] + 6.0 + k * 2.4));
+      lineas.forEach((l, k) => pdf.text(l, startX, tops[idx] + 6.9 + k * 2.7));
     };
 
-    filaSimple(0, "PREDIO:", filas.predio);
-    filaSimple(1, "PROPIETARIO:", filas.propietario);
-    filaMultilinea(2, "UBICACIÓN:", filas.ubicacion, MEMBRETE_PREDIO.MAX_LINEAS_UBICACION);
-
-    separador(3);
-    etiqueta("ÁREA:", startX, 3);
-    valorNegrita(`${this.datosProcesados.areaFinal.toFixed(2)} m²`, startX, 3);
-    etiqueta("PERÍMETRO:", midX, 3);
-    valorNegrita(`${this.datosProcesados.perimetroFinal.toFixed(2)} ml`, midX, 3);
-
-    separador(4);
-    etiqueta(filas.etiquetaEscala, startX, 4);
-    valorNegrita(escala, startX, 4);
-    etiqueta("FECHA:", midX, 4);
-    valorNegrita(fechaPeru(), midX, 4);
-
-    filaSimple(5, "SISTEMA DE COORDENADAS:", filas.sistema);
+    filaEnLinea(0, "PROYECTO:", filas.proyecto);
+    filaEnLinea(1, "PROPIETARIO:", filas.propietario);
+    filaEnLinea(2, "PREDIO:", filas.predio);
+    filaMultilinea(3, "UBICACIÓN:", filas.ubicacion, MEMBRETE_PREDIO.MAX_LINEAS_UBICACION);
+    filaColumnas(4, [
+      ["ÁREA:", `${this.datosProcesados.areaFinal.toFixed(2)} m²`],
+      ["PERÍMETRO:", `${this.datosProcesados.perimetroFinal.toFixed(2)} ml`],
+    ]);
+    // El sistema de coordenadas es el texto más largo: lleva la mitad del ancho.
+    filaColumnas(
+      5,
+      [
+        [filas.etiquetaEscala, escala],
+        ["FECHA:", fechaPeru()],
+        ["SISTEMA DE COORDENADAS:", filas.sistema],
+      ],
+      [1, 1, 2],
+    );
     filaSimple(6, "PROFESIONAL RESPONSABLE:", filas.profesional);
   }
 

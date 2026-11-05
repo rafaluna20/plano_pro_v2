@@ -140,11 +140,11 @@ describe('textos con el perfil PREDIO (predio general)', () => {
     expect(textos.some((t) => /^PREDIO:/.test(t))).toBe(true);
   }, 60000);
 
-  it('un sector enviado por el usuario se imprime, y no se cuela nada de Terra Lima', async () => {
-    const ub = { departamento: 'Ica', provincia: 'Ica', distrito: 'Subtanjalla', urbanizacion: 'Sector Los Olivos' };
+  it('un proyecto enviado por el usuario se imprime, y no se cuela nada de Terra Lima', async () => {
+    const ub = { departamento: 'Ica', provincia: 'Ica', distrito: 'Subtanjalla', urbanizacion: 'Saneamiento físico legal' };
     const textos = await textosDe('rect', ub, 'PREDIO');
-    expect(textos).toContain('SECTOR / URBANIZACIÓN:');
-    expect(textos).toContain('Sector Los Olivos');
+    expect(textos).toContain('PROYECTO:');
+    expect(textos).toContain('Saneamiento físico legal');
     expect(textos.filter((t) => /TERRA|Habilitaci/i.test(t))).toEqual([]);
   }, 60000);
 
@@ -155,7 +155,7 @@ describe('textos con el perfil PREDIO (predio general)', () => {
 });
 
 describe('membrete del plano perimétrico con el perfil PREDIO', () => {
-  const UB = { departamento: 'Ica', provincia: 'Ica', distrito: 'Subtanjalla', urbanizacion: 'Sector Los Olivos', direccion: 'Km 12 Panamericana Sur' };
+  const UB = { departamento: 'Ica', provincia: 'Ica', distrito: 'Subtanjalla', urbanizacion: 'Saneamiento físico legal', direccion: 'Km 12 Panamericana Sur' };
   const PROF = { profesional: { nombre: 'Ing. Ana Torres Ríos', colegiatura: 'CIP 123456' } };
 
   it('imprime los campos nuevos: ubicación completa, sistema de coordenadas, profesional y firma', async () => {
@@ -166,7 +166,8 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     // La ubicación larga puede ocupar dos líneas: se comprueba el contenido, no el corte.
     const i = t.indexOf('UBICACIÓN:');
     const ubicacion = t.slice(i + 1, i + 3).join(' ');
-    for (const parte of ['Km 12 Panamericana Sur', 'Sector Los Olivos', 'Subtanjalla']) expect(ubicacion).toContain(parte);
+    for (const parte of ['Km 12 Panamericana Sur', 'Subtanjalla']) expect(ubicacion).toContain(parte);
+    expect(ubicacion).not.toContain('Saneamiento'); // el proyecto tiene su propia fila
     expect(t).toContain('UTM WGS84 - zona 18S');
     expect(t).toContain('Ing. Ana Torres Ríos - CIP 123456');
     // Sin recuadro de firma y sello: ocupaba demasiado espacio en el membrete.
@@ -194,6 +195,19 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     expect(t).toContain('PREDIO RECT'); // rótulo dentro del dibujo: la denominación del predio
   }, 60000);
 
+  it('las filas van en el orden pedido: PROYECTO, PROPIETARIO, PREDIO, UBICACIÓN, ÁREA/PERÍMETRO, ESCALA/FECHA/SISTEMA, PROFESIONAL', async () => {
+    const t = await textosDe('rect', UB, 'PREDIO', { config: PROF, crudo: true });
+    const ordenEsperado = ['PROYECTO:', 'PROPIETARIO:', 'PREDIO:', 'UBICACIÓN:', 'ÁREA:', 'PERÍMETRO:', 'ESCALA (A3):', 'FECHA:', 'SISTEMA DE COORDENADAS:', 'PROFESIONAL RESPONSABLE:'];
+    let desde = t.indexOf('PROYECTO:');
+    expect(desde).toBeGreaterThan(-1);
+    for (const etiqueta of ordenEsperado) {
+      const i = t.indexOf(etiqueta, desde);
+      expect(i, `falta "${etiqueta}" después del anterior`).toBeGreaterThanOrEqual(desde);
+      desde = i;
+    }
+    expect(t[t.indexOf('PROYECTO:') + 1]).toBe('Saneamiento físico legal');
+  }, 60000);
+
   it('una dirección larga real se reparte en hasta 3 líneas y NO se corta con "..."', async () => {
     const larga = 'lote denominado villa sur 2,ubicado entre el km55 ykm56 de la via autopista panamerica del sur,ingreso hacia la playa';
     const t = await textosDe('rect', { departamento: 'Lima', provincia: 'Lima', distrito: 'Pucusana', direccion: larga }, 'PREDIO', { config: PROF, crudo: true });
@@ -202,6 +216,12 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     expect(lineas.some((l) => l.endsWith('...'))).toBe(false);
     const unido = lineas.join(' ');
     for (const parte of ['villa sur 2', 'km55', 'autopista', 'ingreso hacia la playa', 'Pucusana']) expect(unido).toContain(parte);
+  }, 60000);
+
+  it('el rótulo del dibujo lleva el nombre del predio completo, aunque sea largo (no "PREDIO" genérico)', async () => {
+    const t = await textosDe('rect', undefined, 'PREDIO', { config: PROF, crudo: true });
+    expect(t).toContain('PREDIO RECT');
+    expect(t.filter((x) => x === 'PREDIO')).toEqual([]);
   }, 60000);
 
   it('el membrete de habilitación urbana NO cambia: sigue con sus textos de siempre', async () => {

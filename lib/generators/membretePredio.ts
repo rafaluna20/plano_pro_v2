@@ -17,7 +17,8 @@ export interface ProfesionalResponsable {
 
 export interface DatosMembretePredio {
   denominacion?: string;
-  sector?: string;
+  /** Proyecto / objeto del trámite, p. ej. "Saneamiento físico legal". */
+  proyecto?: string;
   propietario?: string;
   direccion?: string;
   distrito?: string;
@@ -29,6 +30,7 @@ export interface DatosMembretePredio {
 }
 
 export interface FilasMembretePredio {
+  proyecto: string;
   predio: string;
   propietario: string;
   ubicacion: string;
@@ -57,10 +59,10 @@ export function fechaPeru(d: Date = new Date()): string {
 }
 
 export function filasMembretePredio(d: DatosMembretePredio): FilasMembretePredio {
-  // Sin sector, el adaptador usa el nombre del predio como "urbanización": no se repite en la
-  // ubicación ("..., villa sur 2, Pucusana...") cuando es lo mismo que la denominación.
-  const sector = limpio(d.sector).toLowerCase() === limpio(d.denominacion).toLowerCase() ? '' : d.sector;
-  const ubicacion = [d.direccion, sector, d.distrito, d.provincia, d.departamento]
+  // Sin proyecto, el adaptador usa el nombre del predio como "urbanización": si el proyecto es
+  // igual a la denominación es ese relleno, no un proyecto real, y se trata como ausente.
+  const proyecto = limpio(d.proyecto).toLowerCase() === limpio(d.denominacion).toLowerCase() ? '' : limpio(d.proyecto);
+  const ubicacion = [d.direccion, d.distrito, d.provincia, d.departamento]
     .map(limpio)
     .filter(Boolean)
     .join(', ');
@@ -69,7 +71,8 @@ export function filasMembretePredio(d: DatosMembretePredio): FilasMembretePredio
   const colegiatura = limpio(d.profesional?.colegiatura);
 
   return {
-    predio: limpio(d.denominacion) || limpio(d.sector) || NO_CONSTA,
+    proyecto: proyecto || NO_CONSTA,
+    predio: limpio(d.denominacion) || NO_CONSTA,
     propietario: limpio(d.propietario) || NO_CONSTA,
     ubicacion: ubicacion || NO_CONSTA,
     sistema: `UTM WGS84 - zona ${d.zonaUTM ?? 18}S`,
@@ -79,21 +82,25 @@ export function filasMembretePredio(d: DatosMembretePredio): FilasMembretePredio
   };
 }
 
-/** Texto del rótulo del predio dentro del dibujo (en habilitación urbana es "LOTE n"). */
-export function rotuloPredioEnPlano(denominacion?: string): string {
-  return limpio(denominacion).toUpperCase() || 'PREDIO';
+/**
+ * Texto del rótulo del predio dentro del dibujo (en habilitación urbana es "LOTE n"): la
+ * denominación; si falta, el sector; y solo si no hay ninguno, "PREDIO".
+ */
+export function rotuloPredioEnPlano(denominacion?: string, sector?: string): string {
+  return (limpio(denominacion) || limpio(sector)).toUpperCase() || 'PREDIO';
 }
 
 /**
- * Medidas del membrete del predio (mm). Letras un 10 % más pequeñas que el membrete de
- * habilitación urbana (etiquetas 6 -> 5.4 pt, valores 8 -> 7.2 pt) y sin recuadro de firma.
- * La fila de UBICACIÓN es más alta porque admite hasta 3 líneas: las direcciones reales son
- * largas y antes se cortaban con "...".
+ * Medidas del membrete del predio (mm), sin logo ni recuadro de firma. Letras al tamaño
+ * original del plano (etiquetas 6 pt, valores 8 pt). La fila de UBICACIÓN es más alta porque
+ * admite hasta 3 líneas: las direcciones reales son largas y antes se cortaban con "...".
+ *
+ * Orden: PROYECTO, PROPIETARIO, PREDIO (cada uno en una sola línea, etiqueta y valor juntos),
+ * UBICACIÓN, [ÁREA | PERÍMETRO], [ESCALA | FECHA | SISTEMA DE COORDENADAS], PROFESIONAL RESPONSABLE.
  */
 export const MEMBRETE_PREDIO = {
-  FACTOR_FUENTE: 0.9,
-  /** PREDIO, PROPIETARIO, UBICACIÓN (3 líneas), ÁREA/PERÍMETRO, ESCALA/FECHA, SISTEMA, PROFESIONAL */
-  FILAS_MM: [8.5, 8.5, 12, 8.5, 8.5, 8.5, 8.5],
+  FACTOR_FUENTE: 1,
+  FILAS_MM: [7, 7, 7, 13, 9.5, 9.5, 9.5],
   MAX_LINEAS_UBICACION: 3,
 } as const;
 

@@ -17,7 +17,7 @@ describe('fechaPeru', () => {
 describe('filasMembretePredio', () => {
   const completo = {
     denominacion: 'Fundo La Esperanza - Parcela 05',
-    sector: 'Sector Los Olivos',
+    proyecto: 'Saneamiento físico legal',
     propietario: 'Juan Pérez Soto',
     direccion: 'Km 12 Carretera Panamericana Sur',
     distrito: 'Subtanjalla',
@@ -29,9 +29,10 @@ describe('filasMembretePredio', () => {
 
   it('arma todas las filas con los datos completos', () => {
     const f = filasMembretePredio(completo);
+    expect(f.proyecto).toBe('Saneamiento físico legal');
     expect(f.predio).toBe('Fundo La Esperanza - Parcela 05');
     expect(f.propietario).toBe('Juan Pérez Soto');
-    expect(f.ubicacion).toBe('Km 12 Carretera Panamericana Sur, Sector Los Olivos, Subtanjalla, Ica, Ica');
+    expect(f.ubicacion).toBe('Km 12 Carretera Panamericana Sur, Subtanjalla, Ica, Ica');
     expect(f.sistema).toBe('UTM WGS84 - zona 18S');
     expect(f.profesional).toBe('Ing. Ana Torres Ríos - CIP 123456');
     expect(f.etiquetaEscala).toBe('ESCALA (A3):');
@@ -39,6 +40,7 @@ describe('filasMembretePredio', () => {
 
   it('lo que falta dice "No consta", nunca queda en blanco', () => {
     const f = filasMembretePredio({});
+    expect(f.proyecto).toBe('No consta');
     expect(f.predio).toBe('No consta');
     expect(f.propietario).toBe('No consta');
     expect(f.ubicacion).toBe('No consta');
@@ -56,18 +58,19 @@ describe('filasMembretePredio', () => {
     expect(f.propietario).toBe('No consta');
   });
 
-  it('un sector igual a la denominación no se repite en la ubicación (el adaptador lo rellena con el nombre)', () => {
-    const f = filasMembretePredio({ denominacion: 'villa sur 2', sector: 'Villa Sur 2', distrito: 'Pucusana', provincia: 'Lima', departamento: 'Lima' });
-    expect(f.ubicacion).toBe('Pucusana, Lima, Lima');
+  it('un proyecto igual a la denominación es el relleno del adaptador: se trata como ausente', () => {
+    const f = filasMembretePredio({ denominacion: 'villa sur 2', proyecto: 'Villa Sur 2' });
+    expect(f.proyecto).toBe('No consta');
   });
 
-  it('un sector distinto de la denominación sí se imprime', () => {
-    const f = filasMembretePredio({ denominacion: 'Parcela 5', sector: 'Sector Los Olivos', distrito: 'Ica' });
-    expect(f.ubicacion).toBe('Sector Los Olivos, Ica');
+  it('el proyecto NO se mezcla en la ubicación', () => {
+    const f = filasMembretePredio({ denominacion: 'Parcela 5', proyecto: 'Saneamiento físico legal', distrito: 'Ica' });
+    expect(f.proyecto).toBe('Saneamiento físico legal');
+    expect(f.ubicacion).toBe('Ica');
   });
 
-  it('sin denominación usa el sector; la zona UTM por defecto es 18', () => {
-    expect(filasMembretePredio({ sector: 'Sector X' }).predio).toBe('Sector X');
+  it('sin denominación el predio dice "No consta" (el proyecto no lo reemplaza); zona UTM por defecto 18', () => {
+    expect(filasMembretePredio({ proyecto: 'Saneamiento físico legal' }).predio).toBe('No consta');
     expect(filasMembretePredio({ zonaUTM: 17 }).sistema).toBe('UTM WGS84 - zona 17S');
   });
 });
@@ -78,19 +81,23 @@ describe('rotuloPredioEnPlano', () => {
     expect(rotuloPredioEnPlano('')).toBe('PREDIO');
     expect(rotuloPredioEnPlano(undefined)).toBe('PREDIO');
   });
+
+  it('sin denominación usa el sector (respaldo); solo sin ninguno de los dos dice "PREDIO"', () => {
+    expect(rotuloPredioEnPlano(undefined, 'Sector Los Olivos')).toBe('SECTOR LOS OLIVOS');
+    expect(rotuloPredioEnPlano('  ', 'Sector X')).toBe('SECTOR X');
+    expect(rotuloPredioEnPlano('Villa Sur 2', 'Otro sector')).toBe('VILLA SUR 2');
+    expect(rotuloPredioEnPlano(undefined, undefined)).toBe('PREDIO');
+  });
 });
 
 describe('medidas del membrete del predio', () => {
-  it('letras un 10 % más pequeñas (factor 0.9) y altura total de 63 mm', () => {
-    expect(MEMBRETE_PREDIO.FACTOR_FUENTE).toBe(0.9);
-    expect(ALTURA_MEMBRETE_PREDIO_MM).toBe(63);
+  it('letras al tamaño original (factor 1) y altura total de 62.5 mm', () => {
+    expect(MEMBRETE_PREDIO.FACTOR_FUENTE).toBe(1);
+    expect(ALTURA_MEMBRETE_PREDIO_MM).toBe(62.5);
   });
-  it('7 filas; la de ubicación es la más alta (admite 3 líneas)', () => {
+  it('7 filas; la de ubicación (4.ª) es la más alta, porque admite 3 líneas', () => {
     expect(MEMBRETE_PREDIO.FILAS_MM).toHaveLength(7);
-    expect(Math.max(...MEMBRETE_PREDIO.FILAS_MM)).toBe(MEMBRETE_PREDIO.FILAS_MM[2]);
+    expect(Math.max(...MEMBRETE_PREDIO.FILAS_MM)).toBe(MEMBRETE_PREDIO.FILAS_MM[3]);
     expect(MEMBRETE_PREDIO.MAX_LINEAS_UBICACION).toBe(3);
-  });
-  it('es más bajo que el membrete anterior de predios (70 mm)', () => {
-    expect(ALTURA_MEMBRETE_PREDIO_MM).toBeLessThan(70);
   });
 });

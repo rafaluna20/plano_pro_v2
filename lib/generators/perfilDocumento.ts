@@ -70,7 +70,8 @@ export function filasIdentificacion(perfil: string | undefined, lote: LoteTextos
     { label: 'DENOMINACIÓN', value: lote.nombre || lote.codigo || NO_CONSTA },
   ];
   if (lote.codigo && lote.codigo !== lote.nombre) filas.push({ label: 'CÓDIGO', value: lote.codigo });
-  if (u?.urbanizacion) filas.push({ label: 'SECTOR / URBANIZACIÓN', value: u.urbanizacion });
+  if (u?.urbanizacion && u.urbanizacion.trim().toLowerCase() !== (lote.nombre ?? '').trim().toLowerCase())
+    filas.push({ label: 'PROYECTO', value: u.urbanizacion });
   filas.push(
     { label: 'DEPARTAMENTO', value: u?.departamento || NO_CONSTA },
     { label: 'PROVINCIA', value: u?.provincia || NO_CONSTA },

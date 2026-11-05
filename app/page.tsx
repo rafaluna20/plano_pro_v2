@@ -1581,6 +1581,9 @@ export default function EditorPlanos() {
         loteObjetivo: {
           type: "Feature" as const,
           properties: {
+            // Código/denominación del predio: el generador lo imprime en el rótulo del dibujo y en el
+            // membrete. Sin él, el rótulo caía al texto genérico "PREDIO".
+            codigoInterno: data.loteId.trim(),
             identificador: {
               // En un predio general no hay manzana ni lote: vacío, no "A"/"01" inventados.
               manzana: esPredioGeneral ? "" : manzanaMatch ? manzanaMatch[1] : "A",
@@ -2159,7 +2162,7 @@ export default function EditorPlanos() {
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">
                         {data.tipoDocumento === "PREDIO" ? (
-                          "Sector / urbanización (opcional)"
+                          "Proyecto / trámite (opcional)"
                         ) : (
                           <>
                             Nombre del Proyecto <span className="text-red-500">*</span>
