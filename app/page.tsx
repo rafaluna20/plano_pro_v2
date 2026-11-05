@@ -158,7 +158,10 @@ interface LoteData {
   loteId: string;
   propietario: string;
   titularDoc: TitularDocData;
-  ubicacion: UbicacionData;
+  // OJO: no llamarlo `ubicacion`. /print esparce `...data` sobre las props de
+  // PlanoDocument, que ya tiene `ubicacion: string`; un objeto con ese nombre
+  // la pisa y React-PDF falla (HTTP 500).
+  ubicacionLote: UbicacionData;
   area: number;
   membrete: MembreteData;
   vertices: Vertice[];
@@ -184,7 +187,7 @@ const INITIAL_DATA: LoteData = {
   loteId: "",
   propietario: "",
   titularDoc: { tipo: "DNI", numero: "" },
-  ubicacion: { departamento: "", provincia: "", distrito: "", direccion: "" },
+  ubicacionLote: { departamento: "", provincia: "", distrito: "", direccion: "" },
   area: 0,
   membrete: {
     proyecto: "",
@@ -1048,7 +1051,7 @@ export default function EditorPlanos() {
   const handleUbicacionChange = (field: keyof UbicacionData, value: string) => {
     setData((prev) => ({
       ...prev,
-      ubicacion: { ...prev.ubicacion, [field]: value },
+      ubicacionLote: { ...prev.ubicacionLote, [field]: value },
     }));
   };
   const handleTitularDocChange = (
@@ -1092,11 +1095,11 @@ export default function EditorPlanos() {
 
     if (!data.membrete.proyecto.trim())
       faltan.push({ texto: "Nombre del proyecto", tab: "membrete" });
-    if (!data.ubicacion.departamento.trim())
+    if (!data.ubicacionLote.departamento.trim())
       faltan.push({ texto: "Departamento", tab: "membrete" });
-    if (!data.ubicacion.provincia.trim())
+    if (!data.ubicacionLote.provincia.trim())
       faltan.push({ texto: "Provincia", tab: "membrete" });
-    if (!data.ubicacion.distrito.trim())
+    if (!data.ubicacionLote.distrito.trim())
       faltan.push({ texto: "Distrito", tab: "membrete" });
 
     // Los 4 vértices de arranque son un marcador, no un lote real.
@@ -1252,6 +1255,17 @@ export default function EditorPlanos() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...data,
+            // PlanoDocument imprime `ubicacion` como texto y, si falta, usa
+            // "MIRAFLORES, LIMA" por defecto: se manda la ubicación real.
+            ubicacion: [
+              ...new Set(
+                [
+                  data.ubicacionLote.distrito,
+                  data.ubicacionLote.provincia,
+                  data.ubicacionLote.departamento,
+                ].map((t) => t.trim().toUpperCase()),
+              ),
+            ].join(", "),
             satelliteUrl: satelliteUrlToSend,
           }),
         },
@@ -1345,7 +1359,7 @@ export default function EditorPlanos() {
       loteId: data.loteId,
       propietario: data.propietario,
       titularDoc: data.titularDoc,
-      ubicacion: data.ubicacion,
+      ubicacion: data.ubicacionLote,
       proyecto: data.membrete.proyecto,
       vertices: data.vertices,
       vecinos: data.contexto.vecinos,
@@ -1490,10 +1504,10 @@ export default function EditorPlanos() {
             // Datos reales del formulario (validarAntesDeExportar garantiza que
             // departamento/provincia/distrito y documento no están vacíos).
             ubicacion: {
-              direccion: data.ubicacion.direccion.trim() || "Sin dirección",
-              distrito: data.ubicacion.distrito.trim(),
-              provincia: data.ubicacion.provincia.trim(),
-              departamento: data.ubicacion.departamento.trim(),
+              direccion: data.ubicacionLote.direccion.trim() || "Sin dirección",
+              distrito: data.ubicacionLote.distrito.trim(),
+              provincia: data.ubicacionLote.provincia.trim(),
+              departamento: data.ubicacionLote.departamento.trim(),
             },
             titularidad: {
               nombre: data.propietario.trim(),
@@ -1968,7 +1982,7 @@ export default function EditorPlanos() {
                             </label>
                             <input
                               type="text"
-                              value={data.ubicacion[campo]}
+                              value={data.ubicacionLote[campo]}
                               onChange={(e) =>
                                 handleUbicacionChange(campo, e.target.value)
                               }
@@ -1983,7 +1997,7 @@ export default function EditorPlanos() {
                         </label>
                         <input
                           type="text"
-                          value={data.ubicacion.direccion}
+                          value={data.ubicacionLote.direccion}
                           onChange={(e) =>
                             handleUbicacionChange("direccion", e.target.value)
                           }
