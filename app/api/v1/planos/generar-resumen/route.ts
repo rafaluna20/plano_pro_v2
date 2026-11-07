@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
     const resumenRequest: GenerarPlanosRequest = {
       ...payload,
       config: {
+        // El perfil del proyecto (p. ej. INDUSTRIAL) sí se respeta: cambia los textos, no el contenido del resumen.
+        perfil: payload.config?.perfil,
         incluirMemoriaDescriptiva: true,
         soloSeccionLinderosEnMemoria: true,
         incluirPlanoPerimetrico: false,
