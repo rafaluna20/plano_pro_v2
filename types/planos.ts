@@ -51,6 +51,17 @@ export interface LoteMetadata {
   estado: 'libre' | 'separado' | 'vendido';
   precio?: number;
   fechaRegistro?: string;
+  // Del PROYECTO del lote (P5/P7 multiproyecto). Todos opcionales: sin ellos el documento sale como siempre.
+  /** Nombre del proyecto: lo que se imprime donde antes decía «TERRA LIMA» fijo. */
+  proyectoNombre?: string;
+  /** Cómo se llama la agrupación de lotes en este proyecto («Manzana», «Sector»…). */
+  etiquetaAgrupador?: string;
+  /** Cómo se llama cada unidad («Lote», «Módulo»…). */
+  etiquetaNumero?: string;
+  /** Frente del lote en metros (lotes industriales). */
+  frenteM?: number;
+  /** Potencia eléctrica disponible en kW (lotes industriales). */
+  potenciaKw?: number;
   // Ubicación detallada (opcional)
   ubicacion?: {
     departamento?: string;
@@ -66,9 +77,9 @@ export interface LoteMetadata {
   };
 }
 
-// Perfil de documento: HABILITACION_URBANA (por defecto, lo que usa mapa_renasur) o PREDIO
+// Perfil de documento: HABILITACION_URBANA (por defecto, lo que usa mapa_renasur), INDUSTRIAL (lotes industriales: etiquetas del proyecto, frente y potencia) o PREDIO
 // (predio en general, sin proyecto/manzana/lote). Ver lib/generators/perfilDocumento.ts.
-export type PerfilDocumento = 'HABILITACION_URBANA' | 'PREDIO';
+export type PerfilDocumento = 'HABILITACION_URBANA' | 'PREDIO' | 'INDUSTRIAL';
 
 // Profesional que firma el plano (opcional). Se imprime en el membrete del perfil PREDIO.
 export interface ProfesionalResponsable {

@@ -82,6 +82,12 @@ export const loteMetadataSchema = z.object({
   estado: z.enum(['libre', 'separado', 'vendido']),
   precio: z.number().optional(),
   fechaRegistro: z.string().optional(),
+  // Del proyecto del lote. Zod descarta lo no declarado: cada campo nuevo se declara aquí.
+  proyectoNombre: z.string().max(200).optional(),
+  etiquetaAgrupador: z.string().max(40).optional(),
+  etiquetaNumero: z.string().max(40).optional(),
+  frenteM: z.number().nonnegative().optional(),
+  potenciaKw: z.number().nonnegative().optional(),
   ubicacion: z.object({
     departamento: z.string().optional(),
     provincia: z.string().optional(),
@@ -95,7 +101,7 @@ export const loteMetadataSchema = z.object({
 // Plano Config
 export const planoConfigSchema = z.object({
   // Si no se declara aquí, zod descarta el campo en silencio y el generador nunca lo ve.
-  perfil: z.enum(['HABILITACION_URBANA', 'PREDIO']).optional(),
+  perfil: z.enum(['HABILITACION_URBANA', 'PREDIO', 'INDUSTRIAL']).optional(),
   // Igual que `perfil`: si no se declara, zod lo descarta en silencio.
   profesional: z
     .object({ nombre: z.string().max(200).optional(), colegiatura: z.string().max(100).optional() })

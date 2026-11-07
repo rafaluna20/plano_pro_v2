@@ -94,6 +94,9 @@ export interface IdentificadorLote {
   subLote?: string;
   etapa?: string;
   urbanizacion?: string;
+  /** Etiquetas propias del proyecto («Sector», «Módulo»); sin ellas: «Manzana» y «Lote». */
+  etiquetaAgrupador?: string;
+  etiquetaNumero?: string;
 }
 
 /**

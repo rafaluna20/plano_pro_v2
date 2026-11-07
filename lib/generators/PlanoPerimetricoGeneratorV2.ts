@@ -1541,7 +1541,9 @@ export class PlanoPerimetricoGeneratorV2 {
     // vendible) "Mz.  Lt. " queda en blanco y se ve roto — se usa la
     // dirección/distrito como dato de ubicación en su lugar.
     const ubicacionTexto = loteProps.identificador.manzana
-      ? `Mz. ${loteProps.identificador.manzana} Lt.${loteProps.identificador.lote} `
+      ? (loteProps.identificador.etiquetaAgrupador || loteProps.identificador.etiquetaNumero)
+        ? `${loteProps.identificador.etiquetaAgrupador || "Mz."} ${loteProps.identificador.manzana} ${loteProps.identificador.etiquetaNumero || "Lt."} ${loteProps.identificador.lote} `
+        : `Mz. ${loteProps.identificador.manzana} Lt.${loteProps.identificador.lote} `
       : loteProps.ubicacion?.direccion || loteProps.ubicacion?.distrito || "---";
     drawRow(
       2,

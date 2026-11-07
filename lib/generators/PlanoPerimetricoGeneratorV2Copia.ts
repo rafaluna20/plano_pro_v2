@@ -1437,8 +1437,8 @@ export class PlanoPerimetricoGeneratorV2Copia {
       ["Distrito", ubicacion?.distrito || "---"],
       ["Urbanización", loteProps.identificador.urbanizacion || "---"],
       ["Vía de acceso a\nurbanización", ubicacion?.direccion || "---"],
-      ["Manzana", loteProps.identificador.manzana || "---"],
-      ["Lote", loteProps.identificador.lote || "---"],
+      [loteProps.identificador.etiquetaAgrupador || "Manzana", loteProps.identificador.manzana || "---"],
+      [loteProps.identificador.etiquetaNumero || "Lote", loteProps.identificador.lote || "---"],
     ];
     const filaAltos = [3.2, 3.2, 3.2, 3.2, 6, 3.2, 3.2]; // mm, "Vía de acceso" ocupa 2 líneas
     pdf.setFontSize(PLANO_THEME.FONTS.SIZES.SMALL);

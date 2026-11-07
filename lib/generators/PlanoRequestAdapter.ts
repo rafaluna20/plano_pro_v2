@@ -73,7 +73,10 @@ export class PlanoRequestAdapter {
                     manzana: lote.manzana,
                     lote: lote.numeroLote,
                     etapa: lote.etapa,
-                    urbanizacion: lote.ubicacion?.urbanizacion || lote.nombre
+                    urbanizacion: lote.ubicacion?.urbanizacion || lote.nombre,
+                    // Solo el perfil INDUSTRIAL usa las etiquetas del proyecto: los demás documentos siguen diciendo «Manzana» y «Lote».
+                    ...(request.config?.perfil === 'INDUSTRIAL' && lote.etiquetaAgrupador ? { etiquetaAgrupador: lote.etiquetaAgrupador } : {}),
+                    ...(request.config?.perfil === 'INDUSTRIAL' && lote.etiquetaNumero ? { etiquetaNumero: lote.etiquetaNumero } : {})
                 },
                 // Sin defaults a 'Lima': si el payload no trae ubicación
                 // administrativa, se debe ver el vacío ('---') en el

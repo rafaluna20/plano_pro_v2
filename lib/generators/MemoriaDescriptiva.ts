@@ -88,7 +88,7 @@ export class MemoriaDescriptivaGenerator {
     y = await this.checkPageBreak(pdf, y, pageHeight, lote);
     y = this.drawSectionTitle(pdf, 'I. GENERALIDADES', y);
     
-    const generalText = textoGeneralidades(this.config.perfil);
+    const generalText = textoGeneralidades(this.config.perfil, lote);
     y = this.drawJustifiedText(pdf, generalText, y);
     y += this.SECTION_GAP;
 

@@ -63,7 +63,7 @@ function medidas(c: [number, number][]) {
   return { area: Math.abs(s) / 2, perimetro: per, frente: Math.max(...lados) };
 }
 
-async function textosDe(clave: string, ub: any, perfil?: string, extra: { config?: any; crudo?: boolean } = {}): Promise<string[]> {
+async function textosDe(clave: string, ub: any, perfil?: string, extra: { config?: any; crudo?: boolean; lote?: any } = {}): Promise<string[]> {
   const f = LOTES[clave];
   const m = medidas(f.vertices);
   capturados.textos.length = 0;
@@ -73,7 +73,7 @@ async function textosDe(clave: string, ub: any, perfil?: string, extra: { config
     // Un predio general no tiene manzana, lote ni etapa de proyecto.
     lote: perfil === 'PREDIO'
       ? { codigo: `PREDIO-${clave.toUpperCase()}`, nombre: `Predio ${clave}`, manzana: '', etapa: '', numeroLote: '', estado: 'libre', ...(ub ? { ubicacion: ub } : {}) }
-      : { codigo: `E03MZ${f.manzana}${f.numero}P`, nombre: `Lote ${f.numero}`, manzana: f.manzana, etapa: f.etapa, numeroLote: f.numero, estado: 'libre', ...(ub ? { ubicacion: ub } : {}) },
+      : { codigo: `E03MZ${f.manzana}${f.numero}P`, nombre: `Lote ${f.numero}`, manzana: f.manzana, etapa: f.etapa, numeroLote: f.numero, estado: 'libre', ...(ub ? { ubicacion: ub } : {}), ...(extra.lote ?? {}) },
     colindancias: [{ lado: 'norte', tipo: 'lote', nombre: 'Lote 01', longitud: 10 }, { lado: 'sur', tipo: 'calle', nombre: 'Calle 2', longitud: 10 }],
     propietario: { nombre: 'Titular de Prueba SAC', ruc: '20123456789' },
     // Logo inalcanzable: sin red; el generador cae a su texto alternativo.
@@ -232,4 +232,55 @@ describe('membrete del plano perimétrico con el perfil PREDIO', () => {
     expect(t).not.toContain('FIRMA Y SELLO');
     expect(t).not.toContain('PROFESIONAL RESPONSABLE:');
   }, 60000);
+});
+
+describe('el nombre del proyecto sustituye a «TERRA LIMA» fijo (multiproyecto)', () => {
+  const UB = UBICACIONES.completa;
+
+  it('con el perfil por defecto y proyectoNombre, el documento lleva ese nombre y nada de Terra Lima', async () => {
+    const t = await textosDe('rect', { ...UB, urbanizacion: 'Parque Sur' }, undefined, { lote: { proyectoNombre: 'Parque Sur' }, crudo: true });
+    expect(t).toContain('PARQUE SUR');
+    expect(t.join(' ')).toContain('forma parte del proyecto inmobiliario "PARQUE SUR"');
+    expect(t.filter((x) => /TERRA/i.test(x))).toEqual([]);
+  }, 60000);
+
+  it('sin proyectoNombre sigue diciendo TERRA LIMA (compatibilidad)', async () => {
+    const t = await textosDe('rect', UB, undefined, { crudo: true });
+    expect(t).toContain('TERRA LIMA');
+  }, 60000);
+});
+
+describe('textos con el perfil INDUSTRIAL', () => {
+  const UB = { departamento: 'Lima', provincia: 'Cañete', distrito: 'Chilca', urbanizacion: 'Parque Industrial Sur', direccion: 'Km 60 Panamericana Sur' };
+  const LOTE_IND = { proyectoNombre: 'Parque Industrial Sur', etiquetaAgrupador: 'Sector', etiquetaNumero: 'Módulo', frenteM: 30, potenciaKw: 250 };
+
+  it('usa el nombre y las etiquetas del proyecto, e imprime frente y potencia; nada de terreno urbano ni Terra Lima', async () => {
+    const t = await textosDe('rect', UB, 'INDUSTRIAL', { lote: LOTE_IND, crudo: true });
+    const todo = t.join(' ');
+    expect(t).toContain('PARQUE INDUSTRIAL SUR');
+    expect(t).toContain('SECTOR:');
+    expect(t).toContain('MÓDULO:');
+    expect(t).toContain('FRENTE:');
+    expect(t).toContain('30 m');
+    expect(t).toContain('POTENCIA DISPONIBLE:');
+    expect(t).toContain('250 kW');
+    expect(todo).toContain('describir técnica y legalmente el lote industrial');
+    expect(todo).toContain('forma parte del proyecto "PARQUE INDUSTRIAL SUR"');
+    expect(t.filter((x) => /TERRA LIMA|terreno urbano|Desarrollo Inmobiliario|HABILITACI/i.test(x))).toEqual([]);
+    expect(t).toContain('Sector:');                      // plano de ubicación
+  }, 60000);
+
+  it('sin frente ni potencia no imprime esas filas (ni las inventa)', async () => {
+    const t = await textosDe('rect', UB, 'INDUSTRIAL', { lote: { proyectoNombre: 'Parque Industrial Sur' }, crudo: true });
+    expect(t).not.toContain('FRENTE:');
+    expect(t).not.toContain('POTENCIA DISPONIBLE:');
+    expect(t).toContain('SECTOR:');                      // etiquetas por defecto del perfil
+  }, 60000);
+
+  it('el perfil industrial pasa la validación del esquema del servicio', async () => {
+    const { planoConfigSchema, loteMetadataSchema } = await import('@/lib/validators/schemas');
+    expect(planoConfigSchema.parse({ perfil: 'INDUSTRIAL' }).perfil).toBe('INDUSTRIAL');
+    const lote = loteMetadataSchema.parse({ codigo: 'E09MZA001P', nombre: 'x', manzana: 'A', etapa: '9', numeroLote: '1', estado: 'libre', ...LOTE_IND });
+    expect(lote).toMatchObject(LOTE_IND);               // zod no descarta los campos nuevos
+  });
 });

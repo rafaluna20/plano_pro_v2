@@ -6,7 +6,7 @@ import { calculateCentroid, utmToLatLng, getBoundingBox, DEFAULT_UTM_ZONE } from
 import { utmToPaperRelative, metrosAPapel } from '@/lib/geometry/scaleUtils';
 import { MapService } from '@/lib/services/MapService';
 import { PLANO_THEME } from '@/lib/config/PlanoTheme';
-import { cajetinUbicacion } from './perfilDocumento';
+import { cajetinUbicacion, etiquetasDeUnidad } from './perfilDocumento';
 
 /**
  * Generador de Plano de Ubicación Profesional
@@ -394,8 +394,8 @@ export class PlanoUbicacionGenerator {
       { l: 'Provincia:', v: lote.ubicacion?.provincia || '---' },
       { l: 'Distrito:', v: lote.ubicacion?.distrito || '---' },
       { l: 'Urbanización:', v: lote.ubicacion?.urbanizacion || '---' },
-      { l: 'Manzana:', v: lote.manzana || '---' },
-      { l: 'Lote Nº:', v: lote.numeroLote || '---' },
+      { l: etiquetasDeUnidad((this.config as any)?.perfil, lote).agrupador + ':', v: lote.manzana || '---' },
+      { l: etiquetasDeUnidad((this.config as any)?.perfil, lote).numero + ((this.config as any)?.perfil === 'INDUSTRIAL' ? ':' : ' Nº:'), v: lote.numeroLote || '---' },
       { l: 'Zonificación:', v: 'RDM' }, // Dato estático o del JSON
       { l: 'Área Total:', v: `${dimensiones.area.toFixed(2)} m²` },
     ];
