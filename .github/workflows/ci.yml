@@ -1,0 +1,35 @@
+name: CI
+
+# P9 multiproyecto: plan_pro no tenia ninguna verificacion automatica. Este flujo corre en cada push y pull request a main:
+# tipos, pruebas (incluida la "golden" que garantiza que los textos de siempre no cambian) y compilacion.
+# No reemplaza ningun despliegue; solo hace visible si algo se rompio antes de que llegue a produccion.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (informativo, no bloquea)
+        # Hay deuda de lint anterior (p. ej. no-explicit-any en los generadores); no debe volver rojo el primer run.
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
