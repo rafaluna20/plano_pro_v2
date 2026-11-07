@@ -65,4 +65,19 @@ describe('payload real de mapa_renasur → generador de plan_pro', () => {
     expect(t.filter((x) => /TERRA/i.test(x))).toEqual([]);
     expect(t).toContain('PARQUE SUR');
   }, 120000);
+
+  it('lote INDUSTRIAL real: perfil, etiquetas del proyecto, frente y potencia; nada de Terra Lima ni de «terreno urbano»', async () => {
+    const p = leer('payload_real_industrial.json');
+    expect(p.config).toEqual({ perfil: 'INDUSTRIAL' });
+    expect(p.lote).toMatchObject({ proyectoNombre: 'Parque Industrial Sur', etiquetaAgrupador: 'Sector', etiquetaNumero: 'Módulo', frenteM: 35, potenciaKw: 400 });
+    const t = await textosDe(p);
+    const todo = t.join(' | ');
+    expect(t).toContain('PARQUE INDUSTRIAL SUR');
+    expect(t).toContain('SECTOR:');
+    expect(t).toContain('FRENTE:');
+    expect(t).toContain('35 m');
+    expect(t).toContain('400 kW');
+    expect(todo).toContain('lote industrial');
+    expect(t.filter((x) => /TERRA LIMA|terreno urbano|Desarrollo Inmobiliario|HABILITACI/i.test(x))).toEqual([]);
+  }, 120000);
 });
